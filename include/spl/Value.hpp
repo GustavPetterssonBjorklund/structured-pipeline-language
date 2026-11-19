@@ -4,6 +4,7 @@
 
 #include <cstdint>
 #include <iomanip>
+#include <map>
 #include <sstream>
 #include <stdexcept>
 #include <string>
@@ -59,6 +60,8 @@ public:
 private:
     Storage data_;
 };
+
+using Values = std::map<std::string, Value>;
 
 inline bool same_type(const Value& left, Type right) noexcept {
     return left.type() == right;

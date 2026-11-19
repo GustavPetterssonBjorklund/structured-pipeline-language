@@ -9,7 +9,12 @@ result = Multiply(sum, 2)
 
 For `x = 3` and `y = 4`, the result is `14`.
 
-The Python implementations are in `python_nodes/math_nodes.py`. The SPL parser
-and Python worker protocol are not implemented yet, so this is an example of
-the target syntax and node contract rather than a command that can currently
-be executed by the SPL engine.
+The Python implementations are in `python_nodes/math_nodes.py`. The C++ SPL
+engine parses the pipeline, resolves the declared node implementations, and
+invokes them through `runtimes/python/worker.py`.
+
+Run the current Python-backed example from the project root with:
+
+```bash
+just example
+```

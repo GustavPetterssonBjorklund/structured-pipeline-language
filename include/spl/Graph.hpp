@@ -1,11 +1,13 @@
 #pragma once
 
-#include "Value.hpp"
+#include "Error.hpp"
+#include "runtime/RuntimeRegistry.hpp"
 
 #include <algorithm>
 #include <cstdint>
 #include <functional>
 #include <map>
+#include <optional>
 #include <set>
 #include <stdexcept>
 #include <string>
@@ -23,13 +25,14 @@ struct Port {
     bool required = true;
 };
 
-using Values = std::map<std::string, Value>;
-using NodeFunction = std::function<Values(const Values&)>;
+using NodeFunction = std::function<NodeResult(const Values&)>;
 
 struct NodeDefinition {
     std::string id;
     std::vector<Port> ports;
     NodeFunction implementation;
+    std::vector<std::string> error_types;
+    std::optional<runtime::Implementation> runtime_implementation;
 
     const Port* port(const std::string& name, PortDirection direction) const {
         for (const auto& candidate : ports) {
@@ -75,11 +78,15 @@ struct TraceEvent {
     Values inputs;
     Values outputs;
     std::string error;
+    std::optional<ErrorValue> typed_error;
 };
 
 struct ExecutionResult {
     Values outputs;
     std::vector<TraceEvent> trace;
+    std::optional<ErrorValue> error;
+
+    bool succeeded() const noexcept { return !error.has_value(); }
 };
 
 class GraphError : public std::runtime_error {
@@ -90,7 +97,7 @@ public:
 class Graph {
 public:
     void add_definition(NodeDefinition definition) {
-        if (definition.id.empty() || !definition.implementation) {
+        if (definition.id.empty() || (!definition.implementation && !definition.runtime_implementation)) {
             throw GraphError("node definition must have an id and implementation");
         }
         if (definitions_.contains(definition.id)) {
@@ -98,6 +105,12 @@ public:
         }
         validate_ports(definition);
         definitions_.emplace(definition.id, std::move(definition));
+    }
+
+    void add_error_definition(ErrorDefinition definition) {
+        if (definition.id.empty()) throw GraphError("error definition must have an id");
+        if (errors_.contains(definition.id)) throw GraphError("duplicate error definition: " + definition.id);
+        errors_.emplace(std::move(definition.id), std::move(definition));
     }
 
     void add_input(std::string name, Type type) {
@@ -122,6 +135,9 @@ public:
     void validate() const {
         for (const auto& [id, instance] : instances_) {
             const auto& definition = definitions_.at(instance.definition_id);
+            for (const auto& error_type : definition.error_types) {
+                if (!errors_.contains(error_type)) throw GraphError("unknown error type: " + error_type);
+            }
             for (const auto& port : definition.ports) {
                 if (port.direction != PortDirection::Input) continue;
                 const auto binding = instance.inputs.find(port.name);
@@ -143,7 +159,9 @@ public:
         (void)topological_order();
     }
 
-    ExecutionResult execute(const Values& pipeline_inputs) const {
+    ExecutionResult execute(
+        const Values& pipeline_inputs,
+        const runtime::RuntimeRegistry* runtime_registry = nullptr) const {
         validate();
         for (const auto& [name, type] : inputs_) {
             const auto value = pipeline_inputs.find(name);
@@ -169,7 +187,29 @@ public:
             event.status = "running";
             event.inputs = node_inputs;
             try {
-                auto outputs = definition.implementation(node_inputs);
+                NodeResult node_result;
+                if (definition.runtime_implementation) {
+                    if (!runtime_registry) {
+                        throw GraphError("node '" + node_id + "' requires a runtime registry");
+                    }
+                    runtime::ExecutionContext context{node_id};
+                    node_result = runtime_registry->invoke(*definition.runtime_implementation, node_inputs, context);
+                } else {
+                    node_result = definition.implementation(node_inputs);
+                }
+                if (std::holds_alternative<ErrorValue>(node_result)) {
+                    const auto& error = std::get<ErrorValue>(node_result);
+                    if (std::find(definition.error_types.begin(), definition.error_types.end(), error.definition_id()) == definition.error_types.end()) {
+                        throw GraphError("node '" + node_id + "' returned undeclared error: " + error.definition_id());
+                    }
+                    event.status = "failed";
+                    event.error = error.to_string();
+                    event.typed_error = error;
+                    result.trace.push_back(std::move(event));
+                    result.error = error;
+                    return result;
+                }
+                auto outputs = std::get<Values>(std::move(node_result));
                 for (const auto& port : definition.ports) {
                     if (port.direction != PortDirection::Output) continue;
                     const auto output = outputs.find(port.name);
@@ -273,6 +313,7 @@ private:
     }
 
     std::map<std::string, NodeDefinition> definitions_;
+    std::map<std::string, ErrorDefinition> errors_;
     std::map<std::string, Type> inputs_;
     std::map<std::string, NodeInstance> instances_;
     std::map<std::string, Binding> outputs_;

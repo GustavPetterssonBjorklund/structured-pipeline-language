@@ -78,6 +78,7 @@ An important architectural test is a **semantic round-trip** between source, IR,
 - Implicit conversions are disabled by default; conversions must be explicit.
 - Nodes are stateless and side-effect-free by default.
 - Runtime failures are separate from ordinary values; domain-level failures may use `Result<T, E>`.
+- Error types are instanceable typed records. Nodes declare the error types they may return, and domain errors propagate as typed `Result<T, E>` outcomes.
 - Stage 1 begins with deterministic sequential execution. Parallel scheduling follows after the sequential executor is correct.
 - Python is the first external runtime, accessed through persistent workers and a versioned line-delimited JSON protocol.
 - Stage 1 visualization is read-only and uses both IR and execution traces.
@@ -106,6 +107,11 @@ type List<T>
 type Map<K, V>
 type Optional<T>
 type Result<T, E>
+
+error ValidationError {
+    message: String
+    field: String
+}
 
 type User {
     id: String
@@ -160,6 +166,30 @@ type AIResult<T> {
 ```
 
 Some of these are *runtime abstractions*, not ordinary serialized values. `Stream`, `Future`, and `Secret` would need special semantics and enforcement.
+
+### Instanceable domain errors
+
+An SPL error definition is a named, typed record. Each error occurrence is an
+instance carrying validated field values:
+
+```spl
+error ValidationError {
+    message: String
+    field: String
+}
+
+node ValidateAge {
+    input age: Int64
+    output result: Result<Int64, ValidationError>
+
+    impl python "validators.py::validate_age"
+}
+```
+
+Domain errors are values and can cross runtime boundaries. Infrastructure
+failures—such as worker crashes, timeouts, malformed protocol messages, or
+invalid node outputs—remain engine-level execution failures. A node may only
+return error types declared by its signature.
 
 ### Escape hatch
 
@@ -313,6 +343,11 @@ invoke(
     execution_context
 ) -> typed_output_values_or_error
 ```
+
+The public C++ boundary for this contract is `spl::runtime::RuntimeAdapter`.
+Runtime implementations are registered through `spl::runtime::RuntimeRegistry`.
+The SPL core does not embed Python, JavaScript, or other runtime-specific
+execution logic.
 
 Potential runtimes:
 

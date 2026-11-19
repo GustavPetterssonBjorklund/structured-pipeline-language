@@ -3,7 +3,9 @@ cmake_minimum_required(VERSION 3.20)
 project(SPL VERSION 0.1 LANGUAGES CXX)
 
 add_library(spl_core STATIC
+    src/Parser.cpp
     src/spl.cpp
+    src/runtime/PythonAdapter.cpp
 )
 target_compile_features(spl_core PUBLIC cxx_std_20)
 target_include_directories(spl_core PUBLIC
@@ -18,6 +20,9 @@ endif()
 
 add_executable(spl_test tests/main.cpp)
 target_link_libraries(spl_test PRIVATE spl_core)
+
+add_executable(spl-run src/cli/main.cpp)
+target_link_libraries(spl-run PRIVATE spl_core)
 
 enable_testing()
 add_test(NAME spl_core_test COMMAND spl_test)

@@ -14,7 +14,9 @@ static NodeDefinition add_definition() {
          {"sum", PortDirection::Output, Type::Int64}},
         [](const Values& inputs) {
             return Values{{"sum", Value{inputs.at("a").get<std::int64_t>() + inputs.at("b").get<std::int64_t>()}}};
-        }};
+        },
+        {},
+        {}};
 }
 
 static NodeDefinition multiply_definition() {
@@ -25,7 +27,9 @@ static NodeDefinition multiply_definition() {
          {"product", PortDirection::Output, Type::Int64}},
         [](const Values& inputs) {
             return Values{{"product", Value{inputs.at("a").get<std::int64_t>() * inputs.at("b").get<std::int64_t>()}}};
-        }};
+        },
+        {},
+        {}};
 }
 
 int main() {
@@ -62,6 +66,39 @@ int main() {
         rejected = true;
     }
     assert(rejected);
+
+    Graph error_graph;
+    error_graph.add_error_definition(ErrorDefinition{
+        "ValidationError",
+        {{"message", Type::String}, {"field", Type::String}}});
+    error_graph.add_definition(NodeDefinition{
+        "ValidatePositive",
+        {{"value", PortDirection::Input, Type::Int64},
+         {"result", PortDirection::Output, Type::Int64}},
+        [](const Values& inputs) -> NodeResult {
+            const auto value = inputs.at("value").get<std::int64_t>();
+            if (value < 0) {
+                return ErrorValue{
+                    ErrorDefinition{
+                        "ValidationError",
+                        {{"message", Type::String}, {"field", Type::String}}},
+                    Values{{"message", Value{std::string{"must be non-negative"}}},
+                           {"field", Value{std::string{"value"}}}}};
+            }
+            return Values{{"result", Value{value}}};
+        },
+        {"ValidationError"},
+        {}});
+    error_graph.add_input("value", Type::Int64);
+    error_graph.add_instance(NodeInstance{
+        "validation", "ValidatePositive", {{"value", Binding::pipeline_input("value")}}});
+    error_graph.add_output("result", Binding::node_output("validation", "result"));
+
+    const auto error_result = error_graph.execute(Values{{"value", Value{std::int64_t{-1}}}});
+    assert(!error_result.succeeded());
+    assert(error_result.error->definition_id() == "ValidationError");
+    assert(error_result.trace.back().typed_error.has_value());
+    assert(error_result.trace.back().error.find("ValidationError") != std::string::npos);
 
     std::cout << "SPL core tests passed\n";
 }
