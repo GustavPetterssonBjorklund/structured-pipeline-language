@@ -1,4 +1,5 @@
 #include <spl/runtime/PythonAdapter.hpp>
+#include <spl/logging/Logger.hpp>
 
 #define PY_SSIZE_T_CLEAN
 #include <Python.h>
@@ -199,6 +200,8 @@ NodeResult PythonAdapter::invoke(
     const Values& inputs,
     const ExecutionContext& context) {
     const auto gil = PyGILState_Ensure();
+    const auto logger = logging::Logger::module("runtime.python");
+    logger.debug("invoking {}", implementation.target);
     try {
         if (!package_path_added_) {
             add_package_path(python_package_path_);

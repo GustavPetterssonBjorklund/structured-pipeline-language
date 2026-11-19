@@ -1,4 +1,7 @@
 #include <spl/PreparedGraph.hpp>
+#include <spl/logging/Logger.hpp>
+
+#include <chrono>
 
 namespace spl {
 
@@ -70,6 +73,10 @@ ExecutionResult PreparedGraph::execute(
     }
 
     ExecutionResult result;
+    const auto pipeline_started = std::chrono::steady_clock::now();
+    const std::string run_id = "prepared-run-" + std::to_string(++prepared_run_counter);
+    const auto logger = logging::Logger::module("engine.graph");
+    logger.info("pipeline started: {}", run_id);
     std::vector<Values> node_outputs(nodes_.size());
     for (std::size_t node_slot = 0; node_slot < nodes_.size(); ++node_slot) {
         const auto& node = nodes_[node_slot];
@@ -83,8 +90,13 @@ ExecutionResult PreparedGraph::execute(
         }
 
         TraceEvent event;
+        const auto node_started = std::chrono::steady_clock::now();
+        logger.debug("node started: {}", node_id);
         if (collect_trace) {
             event.node_id = node_id;
+            event.node_definition_id = definition.id;
+            event.run_id = run_id;
+            event.invocation_id = run_id + ":" + node_id;
             event.status = "running";
             event.inputs = node_inputs;
         }
@@ -92,7 +104,7 @@ ExecutionResult PreparedGraph::execute(
             NodeResult node_result;
             if (definition.runtime_implementation) {
                 if (!runtime_registry) throw GraphError("node '" + node_id + "' requires a runtime registry");
-                runtime::ExecutionContext context{node_id, {}, {}};
+                runtime::ExecutionContext context{event.invocation_id, run_id, node_id, definition.id, {}, {}};
                 for (const auto& port : definition.ports) {
                     auto& target = port.direction == PortDirection::Input ? context.inputs : context.outputs;
                     target.push_back(runtime::PortSpec{port.name, port.type, port.required});
@@ -108,6 +120,8 @@ ExecutionResult PreparedGraph::execute(
                 }
                 if (collect_trace) {
                     event.status = "failed";
+                    event.event_kind = trace::TraceEventKind::NodeFailed;
+                    event.duration_ns = std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::steady_clock::now() - node_started).count();
                     event.error = error.to_string();
                     event.typed_error = error;
                     result.trace.push_back(std::move(event));
@@ -128,6 +142,8 @@ ExecutionResult PreparedGraph::execute(
             }
             if (collect_trace) {
                 event.status = "succeeded";
+                event.event_kind = trace::TraceEventKind::NodeCompleted;
+                event.duration_ns = std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::steady_clock::now() - node_started).count();
                 event.outputs = outputs;
             }
             node_outputs[node_slot] = std::move(outputs);
@@ -135,6 +151,8 @@ ExecutionResult PreparedGraph::execute(
             if (collect_trace) {
                 event.status = "failed";
                 event.error = error.what();
+                event.event_kind = trace::TraceEventKind::NodeFailed;
+                event.duration_ns = std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::steady_clock::now() - node_started).count();
                 result.trace.push_back(std::move(event));
             }
             throw;
@@ -149,6 +167,60 @@ ExecutionResult PreparedGraph::execute(
                 : node_outputs[output.binding.node_slot].at(output.binding.port_name);
         if (output.type) Graph::require_type(value, *output.type, "pipeline output '" + output.name + "'");
         result.outputs.emplace(output.name, value);
+    }
+    result.statistics.pipeline_duration_ns = std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::steady_clock::now() - pipeline_started).count();
+    logger.info("pipeline completed: {}", run_id);
+    return result;
+}
+
+ExecutionResult PreparedGraph::execute(
+    const Values& pipeline_inputs,
+    const runtime::RuntimeRegistry* runtime_registry,
+    const trace::ExecutionOptions& options) const {
+    auto result = execute(pipeline_inputs, runtime_registry, options.observability.mode != trace::ObservabilityMode::Off);
+    for (const auto& event : result.trace) {
+        trace::TraceEvent structured;
+        structured.kind = event.status == "succeeded" ? trace::TraceEventKind::NodeCompleted : trace::TraceEventKind::NodeFailed;
+        structured.node_instance_id = event.node_id;
+        structured.node_definition_id = event.node_definition_id;
+        structured.invocation_id = event.invocation_id;
+        structured.duration_ns = event.duration_ns;
+        structured.inputs = event.inputs;
+        structured.outputs = event.outputs;
+        structured.error = event.error;
+        structured.typed_error = event.typed_error;
+        observability::publish_trace(structured);
+    }
+    if (options.collector) {
+        for (const auto& event : result.trace) {
+            trace::TraceEvent structured;
+            structured.kind = event.status == "succeeded" ? trace::TraceEventKind::NodeCompleted : trace::TraceEventKind::NodeFailed;
+            structured.node_instance_id = event.node_id;
+            structured.node_definition_id = event.node_definition_id;
+            structured.invocation_id = event.invocation_id;
+            structured.duration_ns = event.duration_ns;
+            structured.inputs = event.inputs;
+            structured.outputs = event.outputs;
+            structured.error = event.error;
+            structured.typed_error = event.typed_error;
+            options.collector->emit(structured);
+        }
+    }
+    for (const auto& sink : options.trace_sinks) {
+        if (!sink) continue;
+        for (const auto& event : result.trace) {
+            trace::TraceEvent structured;
+            structured.kind = event.status == "succeeded" ? trace::TraceEventKind::NodeCompleted : trace::TraceEventKind::NodeFailed;
+            structured.node_instance_id = event.node_id;
+            structured.node_definition_id = event.node_definition_id;
+            structured.invocation_id = event.invocation_id;
+            structured.duration_ns = event.duration_ns;
+            structured.inputs = event.inputs;
+            structured.outputs = event.outputs;
+            structured.error = event.error;
+            structured.typed_error = event.typed_error;
+            sink->emit(structured);
+        }
     }
     return result;
 }

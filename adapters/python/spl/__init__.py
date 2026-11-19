@@ -139,7 +139,7 @@ class Pipeline:
         self.inputs = {name: _TYPES[type_name] for name, type_name in info["inputs"].items()}
         self.outputs = {name: _TYPES[type_name] for name, type_name in info["outputs"].items()}
 
-    def run(self, inputs):
+    def run(self, inputs, observability="off"):
         if not isinstance(inputs, dict):
             raise TypeError("pipeline inputs must be a dict of SPL values")
         for name, value_type in self.inputs.items():
@@ -152,7 +152,7 @@ class Pipeline:
             raise SPLException(f"unknown pipeline input: {unknown[0]}")
         try:
             raw = _native.run_pipeline(
-                self._handle, inputs,
+                self._handle, inputs, observability,
             )
         except _native.Error as error:
             raise SPLException(str(error)) from None
@@ -189,8 +189,69 @@ def load_pipeline(artifact):
     return Pipeline(artifact)
 
 
-def run_pipeline(artifact, inputs):
-    return load_pipeline(artifact).run(inputs)
+def run_pipeline(artifact, inputs, observability="off"):
+    return load_pipeline(artifact).run(inputs, observability=observability)
+
+
+def set_log_level(level):
+    if _native is None:
+        raise SPLException("the native SPL Python extension is not installed")
+    return _native.set_log_level(level)
+
+
+def set_log_filter(pattern):
+    if _native is None:
+        raise SPLException("the native SPL Python extension is not installed")
+    return _native.set_log_filter(pattern)
+
+
+def logs_subscribe(callback):
+    if _native is None:
+        raise SPLException("the native SPL Python extension is not installed")
+    return _native.logs_subscribe(callback)
+
+
+def logs_unsubscribe(subscription):
+    if _native is None:
+        raise SPLException("the native SPL Python extension is not installed")
+    return _native.logs_unsubscribe(subscription)
+
+
+def set_serial_interface(callback):
+    if _native is None:
+        raise SPLException("the native SPL Python extension is not installed")
+    return _native.set_serial_interface(callback)
+
+
+def set_console_interface(handle, color="auto"):
+    if _native is None:
+        raise SPLException("the native SPL Python extension is not installed")
+    return _native.set_console_interface(handle, color)
+
+
+def clear_serial_interface():
+    return set_serial_interface(None)
+
+
+def clear_console_interface():
+    return set_console_interface(None, color=False)
+
+
+set_console_handle = set_console_interface
+clear_console_handle = clear_console_interface
+
+
+# CamelCase aliases for embedding-oriented callers.
+setLogLevel = set_log_level
+setLogFilter = set_log_filter
+logsSubscribe = logs_subscribe
+logsUnsubscribe = logs_unsubscribe
+setSerialInterface = set_serial_interface
+clearSerialInterface = clear_serial_interface
+setConsoleInterface = set_console_interface
+clearConsoleInterface = clear_console_interface
+setConsoleHandle = set_console_handle
+clearConsoleHandle = clear_console_handle
 
 
 buildPipeline = build_pipeline
@@ -201,5 +262,9 @@ runPipeline = run_pipeline
 __all__ = [
     "Bool", "Float64", "Int64", "Outputs", "Pipeline", "SPLException", "SPLValue",
     "String", "build_pipeline", "buildPipeline", "load_pipeline", "loadPipeline",
-    "run_pipeline", "runPipeline",
+    "run_pipeline", "runPipeline", "set_log_level", "setLogLevel", "set_log_filter", "setLogFilter",
+    "logs_subscribe", "logsSubscribe", "logs_unsubscribe", "logsUnsubscribe",
+    "set_serial_interface", "setSerialInterface", "clear_serial_interface", "clearSerialInterface",
+    "set_console_interface", "setConsoleInterface", "clear_console_interface", "clearConsoleInterface",
+    "set_console_handle", "setConsoleHandle", "clear_console_handle", "clearConsoleHandle",
 ]

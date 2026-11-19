@@ -16,6 +16,9 @@ struct PortSpec {
 
 struct ExecutionContext {
     std::string invocation_id;
+    std::string run_id;
+    std::string node_instance_id;
+    std::string node_definition_id;
     std::vector<PortSpec> inputs;
     std::vector<PortSpec> outputs;
 };

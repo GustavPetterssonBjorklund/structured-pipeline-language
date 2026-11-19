@@ -2,6 +2,8 @@
 
 #include "Graph.hpp"
 
+#include <atomic>
+
 namespace spl {
 
 class PreparedGraph {
@@ -14,6 +16,10 @@ public:
         const Values& pipeline_inputs,
         const runtime::RuntimeRegistry* runtime_registry = nullptr,
         bool collect_trace = false) const;
+    ExecutionResult execute(
+        const Values& pipeline_inputs,
+        const runtime::RuntimeRegistry* runtime_registry,
+        const trace::ExecutionOptions& options) const;
 
 private:
     struct PreparedBinding {
@@ -47,6 +53,7 @@ private:
     std::map<std::string, std::size_t> input_slots_;
     std::vector<PreparedNode> nodes_;
     std::vector<PreparedOutput> outputs_;
+    inline static std::atomic<std::uint64_t> prepared_run_counter{0};
 };
 
 } // namespace spl

@@ -2,10 +2,18 @@
 
 #include "Error.hpp"
 #include "runtime/RuntimeRegistry.hpp"
+#include "trace/TraceConfig.hpp"
+#include "trace/TraceCollector.hpp"
+#include "trace/TraceEvent.hpp"
+#include "trace/TraceSink.hpp"
+#include "Observability.hpp"
+#include "logging/Logger.hpp"
 
 #include <algorithm>
+#include <atomic>
 #include <cstdint>
 #include <functional>
+#include <chrono>
 #include <filesystem>
 #include <map>
 #include <optional>
@@ -82,6 +90,32 @@ struct TraceEvent {
     Values outputs;
     std::string error;
     std::optional<ErrorValue> typed_error;
+    trace::TraceEventKind event_kind = trace::TraceEventKind::NodeCompleted;
+    std::string run_id;
+    std::string invocation_id;
+    std::string runtime_id;
+    std::string timestamp;
+    std::int64_t duration_ns = 0;
+    std::string node_definition_id;
+};
+
+struct NodeStatistics {
+    std::string node_id;
+    std::string runtime;
+    std::int64_t execution_duration_ns = 0;
+    std::int64_t runtime_duration_ns = 0;
+    std::int64_t validation_duration_ns = 0;
+    std::size_t input_count = 0;
+    std::size_t output_count = 0;
+    std::string status;
+    std::string error;
+};
+
+struct ExecutionStatistics {
+    std::int64_t pipeline_duration_ns = 0;
+    std::size_t successful_nodes = 0;
+    std::size_t failed_nodes = 0;
+    std::vector<NodeStatistics> nodes;
 };
 
 struct PipelineOutput {
@@ -93,6 +127,7 @@ struct ExecutionResult {
     Values outputs;
     std::vector<TraceEvent> trace;
     std::optional<ErrorValue> error;
+    ExecutionStatistics statistics;
 
     bool succeeded() const noexcept { return !error.has_value(); }
 };
@@ -198,6 +233,18 @@ public:
     ExecutionResult execute(
         const Values& pipeline_inputs,
         const runtime::RuntimeRegistry* runtime_registry = nullptr) const {
+        trace::ExecutionOptions compatibility;
+        compatibility.observability.capture_inputs = true;
+        compatibility.observability.capture_outputs = true;
+        return execute(pipeline_inputs, runtime_registry, compatibility);
+    }
+
+    ExecutionResult execute(
+        const Values& pipeline_inputs,
+        const runtime::RuntimeRegistry* runtime_registry,
+        const trace::ExecutionOptions& options) const {
+        const auto started = std::chrono::steady_clock::now();
+        const auto logger = logging::Logger::module("engine.graph");
         validate();
         for (const auto& [name, type] : inputs_) {
             const auto value = pipeline_inputs.find(name);
@@ -206,7 +253,38 @@ public:
         }
 
         ExecutionResult result;
+        const std::string run_id = "run-" + std::to_string(++run_counter_);
+        auto emit = [&](trace::TraceEventKind kind, const TraceEvent& source) {
+            trace::TraceEvent structured;
+            structured.kind = kind; structured.run_id = run_id;
+            structured.node_instance_id = source.node_id; structured.node_definition_id = source.node_definition_id;
+            structured.invocation_id = source.invocation_id; structured.runtime_id = source.runtime_id;
+            structured.timestamp = source.timestamp; structured.duration_ns = source.duration_ns;
+            auto safe_values = [&](const Values& values, bool output) {
+                std::map<std::string, std::string> captured;
+                for (const auto& [name, value] : values) {
+                    std::string text = options.observability.redactor
+                        ? options.observability.redactor(value, trace::ValueContext{source.node_id, name, output})
+                        : value.to_string();
+                    if (text.size() > options.observability.max_value_length) {
+                        text.resize(options.observability.max_value_length);
+                        text += "...";
+                    }
+                    captured.emplace(name, std::move(text));
+                }
+                return captured;
+            };
+            if (options.observability.mode == trace::ObservabilityMode::Debug || options.observability.capture_inputs) structured.input_values = safe_values(source.inputs, false);
+            if (options.observability.mode == trace::ObservabilityMode::Debug || options.observability.capture_outputs) structured.output_values = safe_values(source.outputs, true);
+            structured.inputs = source.inputs; structured.outputs = source.outputs;
+            structured.error = source.error; structured.typed_error = source.typed_error;
+            for (const auto& sink : options.trace_sinks) if (sink) sink->emit(structured);
+            if (options.collector) options.collector->emit(structured);
+            observability::publish_trace(structured);
+        };
         std::map<std::string, Values> node_outputs;
+        if (options.observability.mode != trace::ObservabilityMode::Off) emit(trace::TraceEventKind::PipelineStarted, TraceEvent{});
+        logger.info("pipeline started: {}", run_id);
         for (const auto& node_id : topological_order()) {
             const auto& instance = instances_.at(node_id);
             const auto& definition = definitions_.at(instance.definition_id);
@@ -220,15 +298,25 @@ public:
 
             TraceEvent event;
             event.node_id = node_id;
+            event.node_definition_id = definition.id;
+            event.run_id = run_id;
+            event.invocation_id = run_id + ":" + node_id;
             event.status = "running";
-            event.inputs = node_inputs;
+            if (options.observability.mode == trace::ObservabilityMode::Debug || options.observability.capture_inputs) event.inputs = node_inputs;
+            const auto node_started = std::chrono::steady_clock::now();
+            logger.debug("node started: {}", node_id);
+            NodeStatistics node_statistics;
+            node_statistics.node_id = node_id;
+            node_statistics.runtime = definition.runtime_implementation ? definition.runtime_implementation->runtime : "native";
+            node_statistics.input_count = node_inputs.size();
+            if (options.observability.mode != trace::ObservabilityMode::Off) emit(trace::TraceEventKind::NodeStarted, event);
             try {
                 NodeResult node_result;
                 if (definition.runtime_implementation) {
                     if (!runtime_registry) {
                         throw GraphError("node '" + node_id + "' requires a runtime registry");
                     }
-                    runtime::ExecutionContext context{node_id, {}, {}};
+                    runtime::ExecutionContext context{event.invocation_id, run_id, node_id, definition.id, {}, {}};
                     for (const auto& port : definition.ports) {
                         if (port.direction == PortDirection::Input) {
                             context.inputs.push_back(runtime::PortSpec{port.name, port.type, port.required});
@@ -236,7 +324,12 @@ public:
                             context.outputs.push_back(runtime::PortSpec{port.name, port.type, port.required});
                         }
                     }
+                    const auto runtime_started = std::chrono::steady_clock::now();
+                    if (options.observability.mode != trace::ObservabilityMode::Off) emit(trace::TraceEventKind::RuntimeInvoked, event);
                     node_result = runtime_registry->invoke(*definition.runtime_implementation, node_inputs, context);
+                    event.runtime_id = definition.runtime_implementation->runtime;
+                    event.duration_ns = std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::steady_clock::now() - runtime_started).count();
+                    if (options.observability.mode != trace::ObservabilityMode::Off) emit(trace::TraceEventKind::RuntimeCompleted, event);
                 } else {
                     node_result = definition.implementation(node_inputs);
                 }
@@ -248,8 +341,18 @@ public:
                     event.status = "failed";
                     event.error = error.to_string();
                     event.typed_error = error;
+                    event.event_kind = trace::TraceEventKind::NodeFailed;
+                    event.duration_ns = std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::steady_clock::now() - node_started).count();
                     result.trace.push_back(std::move(event));
+                    if (options.observability.mode != trace::ObservabilityMode::Off) emit(trace::TraceEventKind::NodeFailed, result.trace.back());
                     result.error = error;
+                    result.statistics.failed_nodes++;
+                    node_statistics.status = "failed";
+                    node_statistics.error = event.error;
+                    node_statistics.execution_duration_ns = event.duration_ns;
+                    result.statistics.nodes.push_back(std::move(node_statistics));
+                    result.statistics.pipeline_duration_ns = std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::steady_clock::now() - started).count();
+                    if (options.observability.mode != trace::ObservabilityMode::Off) emit(trace::TraceEventKind::PipelineFailed, result.trace.back());
                     return result;
                 }
                 auto outputs = std::get<Values>(std::move(node_result));
@@ -266,15 +369,32 @@ public:
                     require_type(output->second, port.type, "output '" + node_id + "." + port.name + "'");
                 }
                 event.status = "succeeded";
-                event.outputs = outputs;
+                if (options.observability.mode == trace::ObservabilityMode::Debug || options.observability.capture_outputs) event.outputs = outputs;
+                event.event_kind = trace::TraceEventKind::NodeCompleted;
+                event.duration_ns = std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::steady_clock::now() - node_started).count();
+                node_statistics.status = "succeeded";
+                node_statistics.output_count = outputs.size();
+                node_statistics.execution_duration_ns = event.duration_ns;
                 node_outputs.emplace(node_id, std::move(outputs));
+                result.statistics.successful_nodes++;
             } catch (const std::exception& error) {
                 event.status = "failed";
                 event.error = error.what();
+                event.event_kind = trace::TraceEventKind::NodeFailed;
+                event.duration_ns = std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::steady_clock::now() - node_started).count();
                 result.trace.push_back(std::move(event));
+                if (options.observability.mode != trace::ObservabilityMode::Off) emit(trace::TraceEventKind::NodeFailed, result.trace.back());
+                result.statistics.failed_nodes++;
+                node_statistics.status = "failed";
+                node_statistics.error = event.error;
+                node_statistics.execution_duration_ns = event.duration_ns;
+                result.statistics.nodes.push_back(std::move(node_statistics));
+                if (options.observability.mode != trace::ObservabilityMode::Off) emit(trace::TraceEventKind::PipelineFailed, result.trace.back());
                 throw;
             }
             result.trace.push_back(std::move(event));
+            result.statistics.nodes.push_back(std::move(node_statistics));
+            if (options.observability.mode != trace::ObservabilityMode::Off) emit(trace::TraceEventKind::NodeCompleted, result.trace.back());
         }
 
         for (const auto& [name, output] : outputs_) {
@@ -282,6 +402,9 @@ public:
             if (output.type) require_type(value, *output.type, "pipeline output '" + name + "'");
             result.outputs.emplace(name, value);
         }
+        result.statistics.pipeline_duration_ns = std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::steady_clock::now() - started).count();
+        if (options.observability.mode != trace::ObservabilityMode::Off) emit(trace::TraceEventKind::PipelineCompleted, TraceEvent{});
+        logger.info("pipeline completed: {}", run_id);
         return result;
     }
 
@@ -387,6 +510,7 @@ private:
     std::map<std::string, Type> inputs_;
     std::map<std::string, NodeInstance> instances_;
     std::map<std::string, PipelineOutput> outputs_;
+    inline static std::atomic<std::uint64_t> run_counter_{0};
 };
 
 } // namespace spl

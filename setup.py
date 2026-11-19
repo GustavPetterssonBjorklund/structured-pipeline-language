@@ -11,6 +11,13 @@ sources = [
     "src/parser/SyntaxParser.cpp",
     "src/spl.cpp",
     "src/runtime/PythonAdapter.cpp",
+    "src/logging/Logger.cpp",
+    "src/logging/ConsoleSink.cpp",
+    "src/logging/ConsoleFormatter.cpp",
+    "src/trace/Trace.cpp",
+    "src/trace/ConsoleTraceSink.cpp",
+    "src/trace/JsonTraceSink.cpp",
+    "src/Observability.cpp",
 ]
 
 setup(

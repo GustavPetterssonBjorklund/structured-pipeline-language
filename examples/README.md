@@ -24,3 +24,9 @@ typed SPL values as well.
 The Python implementations are in `python_nodes/math_nodes.py`. They import
 `spl`, receive typed SPL values as named parameters, and return typed SPL
 values directly. The embedded Python adapter invokes them in-process.
+
+`examples/main.py` also demonstrates SPL-owned console rendering. It installs
+`sys.stdout` with `spl.setConsoleHandle(..., color=True)`, enables DEBUG
+observability, and subscribes separately to structured log records for
+collection. SPL remains responsible for formatting and coloring the console
+output.

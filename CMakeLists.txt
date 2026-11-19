@@ -13,6 +13,13 @@ add_library(spl_core STATIC
     src/parser/SyntaxParser.cpp
     src/spl.cpp
     src/runtime/PythonAdapter.cpp
+    src/logging/Logger.cpp
+    src/logging/ConsoleSink.cpp
+    src/logging/ConsoleFormatter.cpp
+    src/trace/Trace.cpp
+    src/trace/ConsoleTraceSink.cpp
+    src/trace/JsonTraceSink.cpp
+    src/Observability.cpp
 )
 target_compile_features(spl_core PUBLIC cxx_std_20)
 target_include_directories(spl_core PUBLIC
@@ -33,6 +40,7 @@ set(SPL_TEST_TARGETS
     spl_parser_test
     spl_artifact_test
     spl_python_runtime_test
+    spl_observability_test
 )
 
 add_executable(spl_value_test tests/value_test.cpp)
@@ -41,6 +49,7 @@ add_executable(spl_error_test tests/error_test.cpp)
 add_executable(spl_parser_test tests/parser_test.cpp)
 add_executable(spl_artifact_test tests/artifact_test.cpp)
 add_executable(spl_python_runtime_test tests/python_runtime_test.cpp)
+add_executable(spl_observability_test tests/observability_test.cpp)
 
 foreach(test_target IN LISTS SPL_TEST_TARGETS)
     target_link_libraries(${test_target} PRIVATE spl_core)
@@ -57,8 +66,9 @@ add_test(NAME spl_error COMMAND spl_error_test)
 add_test(NAME spl_parser COMMAND spl_parser_test)
 add_test(NAME spl_artifact COMMAND spl_artifact_test)
 add_test(NAME spl_python_runtime COMMAND spl_python_runtime_test)
+add_test(NAME spl_observability COMMAND spl_observability_test)
 add_test(NAME spl_python_example COMMAND spl-run ${CMAKE_CURRENT_SOURCE_DIR}/examples/pipeline.spl)
 set_tests_properties(
-    spl_value spl_graph spl_error spl_parser spl_artifact spl_python_runtime spl_python_example
+    spl_value spl_graph spl_error spl_parser spl_artifact spl_python_runtime spl_observability spl_python_example
     PROPERTIES WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
 )
