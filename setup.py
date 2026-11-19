@@ -3,6 +3,7 @@ from setuptools import Extension, find_packages, setup
 
 sources = [
     "adapters/python/spl/_native.cpp",
+    "src/Artifact.cpp",
     "src/Parser.cpp",
     "src/parser/Compiler.cpp",
     "src/parser/Lexer.cpp",

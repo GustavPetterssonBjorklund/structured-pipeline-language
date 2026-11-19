@@ -4,7 +4,7 @@ import spl
 
 
 def main() -> None:
-    pipeline = spl.load_pipeline("examples/pipeline.spl:Calculation")
+    pipeline = spl.load_pipeline("examples/pipeline.Calculation.splb")
     outputs = pipeline.run({
         "x": spl.Int64(3),
         "y": spl.Int64(4),

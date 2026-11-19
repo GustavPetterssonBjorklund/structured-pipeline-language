@@ -49,7 +49,7 @@ Graph compile(const ProgramSyntax& program, const std::filesystem::path& source_
             definition.ports.push_back(Port{port.name, port.input ? PortDirection::Input : PortDirection::Output, type_from_name(port.type)});
         }
         definition.runtime_implementation = runtime::Implementation{
-            node.runtime, (source_path.parent_path() / node.target).lexically_normal().string()};
+            node.runtime, std::filesystem::absolute(source_path.parent_path() / node.target).lexically_normal().string()};
         graph.add_definition(std::move(definition));
     }
     for (const auto& input : pipeline.inputs) graph.add_input(input.name, type_from_name(input.type));

@@ -45,12 +45,13 @@ through the embedded Python adapter. Python nodes import `spl` and receive
 typed SPL values directly; the active path does not serialize node inputs as
 JSON.
 
-SPL types remain explicit at the Python boundary:
+SPL source is compiled once into a binary artifact, then executed without
+reparsing the source. SPL types remain explicit at the Python boundary:
 
 ```python
 import spl
 
-pipeline = spl.load_pipeline("examples/pipeline.spl:Calculation")
+pipeline = spl.build_pipeline("examples/pipeline.spl:Calculation")
 outputs = pipeline.run({"x": spl.Int64(3), "y": spl.Int64(4)})
 assert outputs["result"] == spl.Int64(14)
 ```

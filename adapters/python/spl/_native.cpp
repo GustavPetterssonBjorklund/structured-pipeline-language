@@ -1,6 +1,7 @@
 #define PY_SSIZE_T_CLEAN
 #include <Python.h>
 
+#include <spl/Artifact.hpp>
 #include <spl/Parser.hpp>
 #include <spl/runtime/PythonAdapter.hpp>
 
@@ -87,10 +88,9 @@ PyObject* type_map(const std::map<std::string, spl::Type>& values) {
 
 PyObject* pipeline_info(PyObject*, PyObject* args) {
     const char* path = nullptr;
-    PyObject* name = nullptr;
-    if (!PyArg_ParseTuple(args, "sO:pipeline_info", &path, &name)) return nullptr;
+    if (!PyArg_ParseTuple(args, "s:pipeline_info", &path)) return nullptr;
     try {
-        const auto graph = spl::parse_pipeline_file(path, pipeline_name(name));
+        const auto graph = spl::read_pipeline_artifact(path);
         PyObject* result = PyDict_New();
         PyObject* inputs = type_map(graph.input_types());
         PyObject* outputs = type_map(graph.output_types());
@@ -105,18 +105,32 @@ PyObject* pipeline_info(PyObject*, PyObject* args) {
     }
 }
 
+PyObject* build_pipeline(PyObject*, PyObject* args) {
+    const char* source = nullptr;
+    PyObject* name = nullptr;
+    const char* artifact = nullptr;
+    if (!PyArg_ParseTuple(args, "sOs:build_pipeline", &source, &name, &artifact)) return nullptr;
+    try {
+        const auto graph = spl::parse_pipeline_file(source, pipeline_name(name));
+        spl::write_pipeline_artifact(graph, artifact);
+        Py_RETURN_NONE;
+    } catch (const std::exception& error) {
+        PyErr_SetString(native_error, error.what());
+        return nullptr;
+    }
+}
+
 PyObject* run_pipeline(PyObject*, PyObject* args) {
     const char* path = nullptr;
-    PyObject* name = nullptr;
     const char* package_path = nullptr;
     PyObject* input_dict = nullptr;
-    if (!PyArg_ParseTuple(args, "sOsO:run_pipeline", &path, &name, &package_path, &input_dict)) return nullptr;
+    if (!PyArg_ParseTuple(args, "ssO:run_pipeline", &path, &package_path, &input_dict)) return nullptr;
     if (!PyDict_Check(input_dict)) {
         PyErr_SetString(PyExc_TypeError, "inputs must be a dict");
         return nullptr;
     }
     try {
-        const auto graph = spl::parse_pipeline_file(path, pipeline_name(name));
+        const auto graph = spl::read_pipeline_artifact(path);
         spl::Values inputs;
         for (const auto& [input_name, type] : graph.input_types()) {
             PyObject* item = PyDict_GetItemString(input_dict, input_name.c_str());
@@ -153,6 +167,7 @@ PyObject* run_pipeline(PyObject*, PyObject* args) {
 }
 
 PyMethodDef methods[] = {
+    {"build_pipeline", build_pipeline, METH_VARARGS, "Compile an SPL source file into an artifact."},
     {"pipeline_info", pipeline_info, METH_VARARGS, "Inspect pipeline input and output types."},
     {"run_pipeline", run_pipeline, METH_VARARGS, "Execute a typed SPL pipeline."},
     {nullptr, nullptr, 0, nullptr},

@@ -111,7 +111,7 @@ class Outputs:
         self.values = dict(values)
 
 
-def _split_spec(spec):
+def _split_source_spec(spec):
     path = Path(spec)
     if not isinstance(spec, str):
         return path, None
@@ -126,13 +126,12 @@ def _wrap(type_name, value):
 
 
 class Pipeline:
-    def __init__(self, path, pipeline_name=None):
+    def __init__(self, path):
         self.path = Path(path)
-        self.pipeline_name = pipeline_name
         if _native is None:
             raise SPLException("the native SPL Python extension is not installed")
         try:
-            info = _native.pipeline_info(str(self.path), pipeline_name)
+            info = _native.pipeline_info(str(self.path))
         except _native.Error as error:
             raise SPLException(str(error)) from None
         self.inputs = {name: _TYPES[type_name] for name, type_name in info["inputs"].items()}
@@ -151,24 +150,47 @@ class Pipeline:
             raise SPLException(f"unknown pipeline input: {unknown[0]}")
         try:
             raw = _native.run_pipeline(
-                str(self.path), self.pipeline_name,
-                str(Path(__file__).parent.parent), inputs,
+                str(self.path), str(Path(__file__).parent.parent), inputs,
             )
         except _native.Error as error:
             raise SPLException(str(error)) from None
         return {name: _wrap(type_name, value) for name, (type_name, value) in raw.items()}
 
 
-def load_pipeline(spec):
-    path, name = _split_spec(spec)
-    return Pipeline(path, name)
+def build_pipeline(spec, output=None):
+    path, name = _split_source_spec(spec)
+    if _native is None:
+        raise SPLException("the native SPL Python extension is not installed")
+    if output is None:
+        filename = f"{path.stem}.{name}.splb" if name else f"{path.stem}.splb"
+        output = path.with_name(filename)
+    output = Path(output)
+    output.parent.mkdir(parents=True, exist_ok=True)
+    try:
+        _native.build_pipeline(str(path), name, str(output))
+    except _native.Error as error:
+        raise SPLException(str(error)) from None
+    return Pipeline(output)
 
 
-def run_pipeline(spec, inputs):
-    return load_pipeline(spec).run(inputs)
+def load_pipeline(artifact):
+    artifact = Path(artifact)
+    if artifact.suffix != ".splb":
+        raise SPLException("run-time loading requires a compiled .splb artifact; use build_pipeline first")
+    return Pipeline(artifact)
+
+
+def run_pipeline(artifact, inputs):
+    return load_pipeline(artifact).run(inputs)
+
+
+buildPipeline = build_pipeline
+loadPipeline = load_pipeline
+runPipeline = run_pipeline
 
 
 __all__ = [
     "Bool", "Float64", "Int64", "Outputs", "Pipeline", "SPLException", "SPLValue",
-    "String", "load_pipeline", "run_pipeline",
+    "String", "build_pipeline", "buildPipeline", "load_pipeline", "loadPipeline",
+    "run_pipeline", "runPipeline",
 ]

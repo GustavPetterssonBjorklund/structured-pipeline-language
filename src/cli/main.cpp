@@ -1,3 +1,4 @@
+#include <spl/Artifact.hpp>
 #include <spl/Parser.hpp>
 #include <spl/runtime/PythonAdapter.hpp>
 
@@ -10,7 +11,9 @@ int main(int argc, char** argv) {
         spl::Values inputs{{"x", spl::Value{std::int64_t{3}}}, {"y", spl::Value{std::int64_t{4}}}};
         spl::runtime::RuntimeRegistry runtimes;
         runtimes.register_adapter(std::make_unique<spl::runtime::PythonAdapter>());
-        const auto graph = spl::parse_pipeline_file(pipeline);
+        const auto graph = pipeline.extension() == ".splb"
+            ? spl::read_pipeline_artifact(pipeline)
+            : spl::parse_pipeline_file(pipeline);
         const auto result = graph.execute(inputs, &runtimes);
         if (!result.succeeded()) {
             std::cerr << result.error->to_string() << '\n';

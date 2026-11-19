@@ -20,8 +20,12 @@ venv:
     python3 -m venv --upgrade-deps .venv
     .venv/bin/python -m pip install -e .
 
-# Execute the SPL example through the typed Python package.
-example: venv
+# Compile the example source into a run-time artifact.
+build-example: venv
+    .venv/bin/python -c 'import spl; spl.build_pipeline("examples/pipeline.spl:Calculation")'
+
+# Execute the compiled SPL example through the typed Python package.
+example: build-example
     .venv/bin/python examples/main.py
 
 # Remove generated build output.

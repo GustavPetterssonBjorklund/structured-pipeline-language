@@ -6,6 +6,7 @@
 #include <algorithm>
 #include <cstdint>
 #include <functional>
+#include <filesystem>
 #include <map>
 #include <optional>
 #include <set>
@@ -98,6 +99,10 @@ class GraphError : public std::runtime_error {
 public:
     using std::runtime_error::runtime_error;
 };
+
+class Graph;
+void write_pipeline_artifact(const Graph& graph, const std::filesystem::path& path);
+Graph read_pipeline_artifact(const std::filesystem::path& path);
 
 class Graph {
 public:
@@ -278,6 +283,9 @@ public:
     }
 
 private:
+    friend void write_pipeline_artifact(const Graph&, const std::filesystem::path&);
+    friend Graph read_pipeline_artifact(const std::filesystem::path&);
+
     static void validate_ports(const NodeDefinition& definition) {
         std::set<std::string> names;
         for (const auto& port : definition.ports) {

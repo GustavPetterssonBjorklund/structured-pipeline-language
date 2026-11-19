@@ -15,15 +15,12 @@ Run it through the typed Python package with:
 just example
 ```
 
+`just example` first creates `pipeline.Calculation.splb` and then runs that
+compiled artifact. Runtime execution does not parse `pipeline.spl`.
+
 The inputs use explicit SPL types (`spl.Int64`) and the returned outputs are
 typed SPL values as well.
 
 The Python implementations are in `python_nodes/math_nodes.py`. They import
 `spl`, receive typed SPL values as named parameters, and return typed SPL
 values directly. The embedded Python adapter invokes them in-process.
-
-Run the current Python-backed example from the project root with:
-
-```bash
-just example
-```
