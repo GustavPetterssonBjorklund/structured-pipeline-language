@@ -42,6 +42,7 @@ Graph compile(const ProgramSyntax& program, const std::filesystem::path& source_
     }
     const auto& pipeline = *selected;
     Graph graph;
+    graph.set_pipeline_name(pipeline.id);
     for (const auto& node : program.nodes) {
         NodeDefinition definition;
         definition.id = node.id;

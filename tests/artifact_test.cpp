@@ -15,6 +15,7 @@ int main() {
     const auto graph = parse_pipeline_file(std::filesystem::path{"tests/fixtures/literals.spl"});
     write_pipeline_artifact(graph, artifact);
     const auto restored = read_pipeline_artifact(artifact);
+    require(restored.pipeline_name() == "Literals", "artifact pipeline name was not preserved");
     const auto prepared = restored.prepare();
     const auto result = prepared.execute({});
     const auto repeated = prepared.execute({});

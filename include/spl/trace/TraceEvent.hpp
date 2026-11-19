@@ -21,6 +21,7 @@ std::string_view trace_event_kind_name(TraceEventKind kind) noexcept;
 struct TraceEvent {
     TraceEventKind kind = TraceEventKind::NodeStarted;
     std::string run_id;
+    std::string pipeline_name;
     std::string node_definition_id;
     std::string node_instance_id;
     std::string invocation_id;

@@ -34,6 +34,7 @@ public:
             if (!stream_) return;
             stream_ << "{\"event_kind\":" << json(std::string(trace_event_kind_name(event.kind)))
                     << ",\"run_id\":" << json(event.run_id)
+                    << ",\"pipeline_name\":" << json(event.pipeline_name)
                     << ",\"node_instance_id\":" << json(event.node_instance_id)
                     << ",\"node_definition_id\":" << json(event.node_definition_id)
                     << ",\"invocation_id\":" << json(event.invocation_id)

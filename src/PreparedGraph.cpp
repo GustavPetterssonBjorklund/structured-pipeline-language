@@ -76,7 +76,7 @@ ExecutionResult PreparedGraph::execute(
     const auto pipeline_started = std::chrono::steady_clock::now();
     const std::string run_id = "prepared-run-" + std::to_string(++prepared_run_counter);
     const auto logger = logging::Logger::module("engine.graph");
-    logger.info("pipeline started: {}", run_id);
+    logger.info("pipeline started: {} ({})", graph_.pipeline_name_, run_id);
     std::vector<Values> node_outputs(nodes_.size());
     for (std::size_t node_slot = 0; node_slot < nodes_.size(); ++node_slot) {
         const auto& node = nodes_[node_slot];
@@ -169,7 +169,7 @@ ExecutionResult PreparedGraph::execute(
         result.outputs.emplace(output.name, value);
     }
     result.statistics.pipeline_duration_ns = std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::steady_clock::now() - pipeline_started).count();
-    logger.info("pipeline completed: {}", run_id);
+    logger.info("pipeline completed: {} ({})", graph_.pipeline_name_, run_id);
     return result;
 }
 
@@ -181,6 +181,8 @@ ExecutionResult PreparedGraph::execute(
     for (const auto& event : result.trace) {
         trace::TraceEvent structured;
         structured.kind = event.status == "succeeded" ? trace::TraceEventKind::NodeCompleted : trace::TraceEventKind::NodeFailed;
+        structured.run_id = event.run_id;
+        structured.pipeline_name = graph_.pipeline_name_;
         structured.node_instance_id = event.node_id;
         structured.node_definition_id = event.node_definition_id;
         structured.invocation_id = event.invocation_id;
@@ -195,6 +197,8 @@ ExecutionResult PreparedGraph::execute(
         for (const auto& event : result.trace) {
             trace::TraceEvent structured;
             structured.kind = event.status == "succeeded" ? trace::TraceEventKind::NodeCompleted : trace::TraceEventKind::NodeFailed;
+            structured.run_id = event.run_id;
+            structured.pipeline_name = graph_.pipeline_name_;
             structured.node_instance_id = event.node_id;
             structured.node_definition_id = event.node_definition_id;
             structured.invocation_id = event.invocation_id;
@@ -211,6 +215,8 @@ ExecutionResult PreparedGraph::execute(
         for (const auto& event : result.trace) {
             trace::TraceEvent structured;
             structured.kind = event.status == "succeeded" ? trace::TraceEventKind::NodeCompleted : trace::TraceEventKind::NodeFailed;
+            structured.run_id = event.run_id;
+            structured.pipeline_name = graph_.pipeline_name_;
             structured.node_instance_id = event.node_id;
             structured.node_definition_id = event.node_definition_id;
             structured.invocation_id = event.invocation_id;

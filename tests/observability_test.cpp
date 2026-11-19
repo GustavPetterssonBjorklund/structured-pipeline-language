@@ -2,6 +2,7 @@
 #include "support/TestFixtures.hpp"
 
 #include <spl/logging/Logger.hpp>
+#include <spl/logging/ConsoleFormatter.hpp>
 #include <spl/Observability.hpp>
 #include <spl/trace/TraceCollector.hpp>
 
@@ -53,4 +54,17 @@ int main() {
     (void)serial_result;
     clear_serial_interface();
     require(serial_lines.size() >= 2, "serial interface did not receive log and trace records");
+
+    trace::TraceEvent start;
+    start.kind = trace::TraceEventKind::PipelineStarted;
+    start.pipeline_name = "Calculation";
+    start.run_id = "test-run";
+    const auto header = logging::format_console_trace(start);
+    require(header.find("╭─ Calculation · test-run") != std::string::npos, "console tree header was missing");
+    trace::TraceEvent done;
+    done.kind = trace::TraceEventKind::NodeCompleted;
+    done.node_instance_id = "sum";
+    done.duration_ns = 800000;
+    const auto node = logging::format_console_trace(done);
+    require(node.find("✓ sum") != std::string::npos, "console tree node completion was missing");
 }

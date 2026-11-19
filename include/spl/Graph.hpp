@@ -144,6 +144,8 @@ Graph read_pipeline_artifact(const std::filesystem::path& path);
 class Graph {
 public:
     PreparedGraph prepare() const;
+    const std::string& pipeline_name() const noexcept { return pipeline_name_; }
+    void set_pipeline_name(std::string name) { pipeline_name_ = std::move(name); }
     const std::map<std::string, Type>& input_types() const noexcept { return inputs_; }
 
     std::map<std::string, Type> output_types() const {
@@ -256,7 +258,7 @@ public:
         const std::string run_id = "run-" + std::to_string(++run_counter_);
         auto emit = [&](trace::TraceEventKind kind, const TraceEvent& source) {
             trace::TraceEvent structured;
-            structured.kind = kind; structured.run_id = run_id;
+            structured.kind = kind; structured.run_id = run_id; structured.pipeline_name = pipeline_name_;
             structured.node_instance_id = source.node_id; structured.node_definition_id = source.node_definition_id;
             structured.invocation_id = source.invocation_id; structured.runtime_id = source.runtime_id;
             structured.timestamp = source.timestamp; structured.duration_ns = source.duration_ns;
@@ -284,7 +286,7 @@ public:
         };
         std::map<std::string, Values> node_outputs;
         if (options.observability.mode != trace::ObservabilityMode::Off) emit(trace::TraceEventKind::PipelineStarted, TraceEvent{});
-        logger.info("pipeline started: {}", run_id);
+        logger.info("pipeline started: {} ({})", pipeline_name_, run_id);
         for (const auto& node_id : topological_order()) {
             const auto& instance = instances_.at(node_id);
             const auto& definition = definitions_.at(instance.definition_id);
@@ -404,7 +406,7 @@ public:
         }
         result.statistics.pipeline_duration_ns = std::chrono::duration_cast<std::chrono::nanoseconds>(std::chrono::steady_clock::now() - started).count();
         if (options.observability.mode != trace::ObservabilityMode::Off) emit(trace::TraceEventKind::PipelineCompleted, TraceEvent{});
-        logger.info("pipeline completed: {}", run_id);
+        logger.info("pipeline completed: {} ({})", pipeline_name_, run_id);
         return result;
     }
 
@@ -507,6 +509,7 @@ private:
 
     std::map<std::string, NodeDefinition> definitions_;
     std::map<std::string, ErrorDefinition> errors_;
+    std::string pipeline_name_;
     std::map<std::string, Type> inputs_;
     std::map<std::string, NodeInstance> instances_;
     std::map<std::string, PipelineOutput> outputs_;

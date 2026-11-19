@@ -7,7 +7,7 @@
 namespace spl {
 namespace {
 
-constexpr std::uint32_t artifact_version = 1;
+constexpr std::uint32_t artifact_version = 2;
 constexpr std::uint64_t max_count = 1'000'000;
 constexpr std::uint64_t max_string = 64 * 1024 * 1024;
 
@@ -161,6 +161,7 @@ void write_pipeline_artifact(const Graph& graph, const std::filesystem::path& pa
     Writer writer(file);
     file.write("SPLB", 4);
     writer.u32(artifact_version);
+    writer.string(graph.pipeline_name_);
 
     writer.u64(graph.errors_.size());
     for (const auto& [id, definition] : graph.errors_) {
@@ -206,6 +207,7 @@ Graph read_pipeline_artifact(const std::filesystem::path& path) {
     if (reader.u32() != artifact_version) throw GraphError("unsupported SPL pipeline artifact version");
 
     Graph graph;
+    graph.pipeline_name_ = reader.string();
     for (std::uint64_t i = 0, size = reader.count(); i < size; ++i) {
         ErrorDefinition definition{reader.string(), {}};
         for (std::uint64_t j = 0, fields = reader.count(); j < fields; ++j) {
