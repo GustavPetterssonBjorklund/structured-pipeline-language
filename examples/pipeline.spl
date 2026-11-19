@@ -1,0 +1,30 @@
+// Example SPL pipeline using two Python nodes.
+// The syntax is the current design target; the SPL parser and worker runtime
+// are planned follow-up milestones.
+
+node Add {
+    input a: Int64
+    input b: Int64
+    output sum: Int64
+
+    impl python "python_nodes/math_nodes.py::add"
+}
+
+node Multiply {
+    input a: Int64
+    input b: Int64
+    output product: Int64
+
+    impl python "python_nodes/math_nodes.py::multiply"
+}
+
+pipeline Calculation {
+    input x: Int64
+    input y: Int64
+    output result: Int64
+
+    let sum = Add(a = x, b = y)
+    let product = Multiply(a = sum.sum, b = 2)
+
+    result = product.product
+}
