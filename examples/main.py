@@ -19,7 +19,7 @@ def main() -> None:
     subscription = spl.logsSubscribe(on_log)
     spl.setConsoleHandle(sys.stdout, color=True)
 
-    pipeline = spl.load_pipeline("examples/pipeline.Calculation.splb")
+    pipeline = spl.load_pipeline("examples/pipeline.Calculation")
     try:
         outputs = pipeline.run(
             {"x": spl.Int64(3), "y": spl.Int64(4)},

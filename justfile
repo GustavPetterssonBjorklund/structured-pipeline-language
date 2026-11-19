@@ -21,11 +21,11 @@ venv:
     if test ! -f .venv/.spl-installed || test setup.py -nt .venv/.spl-installed || test pyproject.toml -nt .venv/.spl-installed || find adapters/python/spl src include -type f \( -name '*.cpp' -o -name '*.hpp' \) -newer .venv/.spl-installed -print -quit | grep -q .; then .venv/bin/python -m pip install -e . && touch .venv/.spl-installed; fi
 
 # Compile the example source into a run-time artifact.
-build-example: venv
-    if test ! -f examples/pipeline.Calculation.splb || test examples/pipeline.spl -nt examples/pipeline.Calculation.splb; then .venv/bin/python -c 'import spl; spl.build_pipeline("examples/pipeline.spl:Calculation")'; fi
+build-example: build
+    if test ! -f examples/pipeline.Calculation.splb || test examples/pipeline.spl -nt examples/pipeline.Calculation.splb; then ./build/spl build examples/pipeline.spl:Calculation; fi
 
 # Execute the compiled SPL example through the typed Python package.
-example: build-example
+example: build-example venv
     .venv/bin/python examples/main.py
 
 # Remove generated build output.

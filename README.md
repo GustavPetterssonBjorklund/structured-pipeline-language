@@ -54,10 +54,14 @@ TypeScript files are compiled with `tsc` for each invocation.
 SPL source is compiled once into a binary artifact, then executed without
 reparsing the source. SPL types remain explicit at the Python boundary:
 
+```bash
+build/spl build examples/pipeline.spl:Calculation
+```
+
 ```python
 import spl
 
-pipeline = spl.build_pipeline("examples/pipeline.spl:Calculation")
+pipeline = spl.load_pipeline("examples/pipeline.Calculation")
 outputs = pipeline.run({"x": spl.Int64(3), "y": spl.Int64(4)})
 assert outputs["result"] == spl.Int64(15)
 ```

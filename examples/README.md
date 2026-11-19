@@ -17,8 +17,9 @@ Run it through the typed Python package with:
 just example
 ```
 
-`just example` first creates `pipeline.Calculation.splb` and then runs that
-compiled artifact. Runtime execution does not parse `pipeline.spl`.
+`just example` first runs `build/spl build` to create `pipeline.Calculation.splb`
+and then runs that compiled artifact. Runtime execution does not parse
+`pipeline.spl`.
 
 The inputs use explicit SPL types (`spl.Int64`) and the returned outputs are
 typed SPL values as well.

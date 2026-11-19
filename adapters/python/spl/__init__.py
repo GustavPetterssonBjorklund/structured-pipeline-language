@@ -185,7 +185,7 @@ def build_pipeline(spec, output=None):
 def load_pipeline(artifact):
     artifact = Path(artifact)
     if artifact.suffix != ".splb":
-        raise SPLException("run-time loading requires a compiled .splb artifact; use build_pipeline first")
+        artifact = artifact.with_name(artifact.name + ".splb")
     return Pipeline(artifact)
 
 

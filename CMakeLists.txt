@@ -59,6 +59,10 @@ foreach(test_target IN LISTS SPL_TEST_TARGETS)
     target_include_directories(${test_target} PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/tests)
 endforeach()
 
+add_executable(spl src/cli/main.cpp)
+target_link_libraries(spl PRIVATE spl_core)
+
+# Keep the old executable name available for existing scripts.
 add_executable(spl-run src/cli/main.cpp)
 target_link_libraries(spl-run PRIVATE spl_core)
 
@@ -78,7 +82,7 @@ if (SPL_NODE_EXECUTABLE)
     endif()
 endif()
 add_test(NAME spl_observability COMMAND spl_observability_test)
-add_test(NAME spl_python_example COMMAND spl-run ${CMAKE_CURRENT_SOURCE_DIR}/examples/pipeline.spl)
+add_test(NAME spl_python_example COMMAND spl ${CMAKE_CURRENT_SOURCE_DIR}/examples/pipeline.spl)
 set_tests_properties(
     spl_value spl_graph spl_error spl_parser spl_artifact spl_python_runtime spl_observability spl_python_example
     PROPERTIES WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
