@@ -1,4 +1,5 @@
 #include <spl/runtime/JavaScriptAdapter.hpp>
+#include <spl/logging/Logger.hpp>
 
 #include <fstream>
 #include <filesystem>
@@ -146,6 +147,8 @@ JavaScriptAdapter::JavaScriptAdapter(std::string node_executable, std::string wo
 std::string JavaScriptAdapter::id() const { return "javascript"; }
 
 NodeResult JavaScriptAdapter::invoke(const Implementation& implementation, const Values& inputs, const ExecutionContext& context) {
+    const auto logger = logging::Logger::module("runtime.javascript");
+    logger.debug("invoking {}", implementation.target);
     const auto base = std::filesystem::temp_directory_path() / ("spl-javascript-" + std::to_string(++request_counter));
     const auto request = base.string() + ".request.json";
     const auto response = base.string() + ".response.json";
