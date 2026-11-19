@@ -1,6 +1,4 @@
-// Example SPL pipeline using two Python nodes.
-// The syntax is the current design target; the SPL parser and worker runtime
-// are planned follow-up milestones.
+// Example SPL pipeline using two typed, embedded Python nodes.
 
 node Add {
     input a: Int64

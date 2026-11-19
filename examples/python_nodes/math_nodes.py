@@ -1,11 +1,13 @@
-"""Python implementations for examples/pipeline.spl."""
+"""Typed Python implementations for examples/pipeline.spl."""
+
+import spl
 
 
-def add(inputs: dict[str, int]) -> dict[str, int]:
+def add(a: spl.Int64, b: spl.Int64) -> spl.Int64:
     """Return the sum of two Int64 SPL inputs."""
-    return {"sum": inputs["a"] + inputs["b"]}
+    return a + b
 
 
-def multiply(inputs: dict[str, int]) -> dict[str, int]:
+def multiply(a: spl.Int64, b: spl.Int64) -> spl.Int64:
     """Return the product of two Int64 SPL inputs."""
-    return {"product": inputs["a"] * inputs["b"]}
+    return a * b

@@ -1,0 +1,9 @@
+pipeline First {
+    output answer: Int64
+    answer = 1
+}
+
+pipeline Second {
+    output answer: Int64
+    answer = 2
+}

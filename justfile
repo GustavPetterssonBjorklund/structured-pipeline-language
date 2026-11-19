@@ -15,11 +15,14 @@ build:
 test: build
     ctest --test-dir build --output-on-failure
 
-# Build and execute the SPL example through the C++ engine.
-example:
-    cmake -S . -B build -DCMAKE_BUILD_TYPE=Debug
-    cmake --build build --target spl-run
-    ./build/spl-run examples/pipeline.spl
+# Create the local Python environment and install SPL into it.
+venv:
+    python3 -m venv --upgrade-deps .venv
+    .venv/bin/python -m pip install -e .
+
+# Execute the SPL example through the typed Python package.
+example: venv
+    .venv/bin/python examples/main.py
 
 # Remove generated build output.
 clean:

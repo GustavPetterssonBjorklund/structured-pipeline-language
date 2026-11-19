@@ -2,6 +2,8 @@ cmake_minimum_required(VERSION 3.20)
 
 project(SPL VERSION 0.1 LANGUAGES CXX)
 
+find_package(Python3 COMPONENTS Development.Embed REQUIRED)
+
 add_library(spl_core STATIC
     src/Parser.cpp
     src/parser/Compiler.cpp
@@ -14,6 +16,7 @@ target_compile_features(spl_core PUBLIC cxx_std_20)
 target_include_directories(spl_core PUBLIC
     ${CMAKE_CURRENT_SOURCE_DIR}/include
 )
+target_link_libraries(spl_core PUBLIC Python3::Python)
 
 if (MSVC)
     target_compile_options(spl_core PRIVATE /W4 /permissive-)

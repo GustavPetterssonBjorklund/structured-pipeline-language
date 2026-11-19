@@ -101,6 +101,17 @@ public:
 
 class Graph {
 public:
+    const std::map<std::string, Type>& input_types() const noexcept { return inputs_; }
+
+    std::map<std::string, Type> output_types() const {
+        std::map<std::string, Type> result;
+        for (const auto& [name, output] : outputs_) {
+            if (!output.type) throw GraphError("pipeline output has no type: " + name);
+            result.emplace(name, *output.type);
+        }
+        return result;
+    }
+
     void add_definition(NodeDefinition definition) {
         if (definition.id.empty() || (!definition.implementation && !definition.runtime_implementation)) {
             throw GraphError("node definition must have an id and implementation");
@@ -209,7 +220,14 @@ public:
                     if (!runtime_registry) {
                         throw GraphError("node '" + node_id + "' requires a runtime registry");
                     }
-                    runtime::ExecutionContext context{node_id};
+                    runtime::ExecutionContext context{node_id, {}, {}};
+                    for (const auto& port : definition.ports) {
+                        if (port.direction == PortDirection::Input) {
+                            context.inputs.push_back(runtime::PortSpec{port.name, port.type, port.required});
+                        } else {
+                            context.outputs.push_back(runtime::PortSpec{port.name, port.type, port.required});
+                        }
+                    }
                     node_result = runtime_registry->invoke(*definition.runtime_implementation, node_inputs, context);
                 } else {
                     node_result = definition.implementation(node_inputs);

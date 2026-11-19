@@ -21,4 +21,12 @@ int main() {
         std::filesystem::path{"tests/fixtures/inline.spl"});
     require(from_source.execute({}).outputs.at("answer").get<std::int64_t>() == 42,
             "source-string parser entry point failed");
+
+    const auto second = parse_pipeline_file(
+        std::filesystem::path{"tests/fixtures/multiple_pipelines.spl"}, "Second");
+    require(second.execute({}).outputs.at("answer").get<std::int64_t>() == 2,
+            "named pipeline selection failed");
+    require_graph_error([&] {
+        (void)parse_pipeline_file(std::filesystem::path{"tests/fixtures/multiple_pipelines.spl"});
+    }, "ambiguous pipeline selection was accepted");
 }

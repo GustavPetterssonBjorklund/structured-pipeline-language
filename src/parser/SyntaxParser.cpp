@@ -32,16 +32,13 @@ std::string SyntaxParser::expect_type() { return expect(TokenKind::TypeName, "a 
 
 ProgramSyntax SyntaxParser::parse() {
     ProgramSyntax program;
-    bool found_pipeline = false;
     while (current().kind != TokenKind::End) {
         if (accept(TokenKind::Node)) program.nodes.push_back(parse_node());
         else if (accept(TokenKind::Pipeline)) {
-            if (found_pipeline) fail(current(), "only one pipeline declaration is supported");
-            program.pipeline = parse_pipeline();
-            found_pipeline = true;
+            program.pipelines.push_back(parse_pipeline());
         } else fail(current(), "expected node or pipeline declaration");
     }
-    if (!found_pipeline) fail(current(), "no pipeline declaration found");
+    if (program.pipelines.empty()) fail(current(), "no pipeline declaration found");
     return program;
 }
 

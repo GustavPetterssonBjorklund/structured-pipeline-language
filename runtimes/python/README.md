@@ -1,6 +1,9 @@
-# Python runtime
+# Python worker runtime (legacy isolation backend)
 
-This directory contains the Python-side runtime boundary for SPL.
+This directory contains the optional process-isolated Python worker. The
+default Python adapter now embeds CPython and calls typed Python nodes
+directly; this worker remains available for a future explicitly isolated
+adapter.
 
 The worker currently accepts a versioned JSON request through `--input-json`
 and emits a versioned JSON response. Values are tagged with their SPL type so

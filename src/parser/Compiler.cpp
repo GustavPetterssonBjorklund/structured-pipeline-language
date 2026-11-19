@@ -25,7 +25,22 @@ Binding compile_binding(const BindingSyntax& binding) {
 
 } // namespace
 
-Graph compile(const ProgramSyntax& program, const std::filesystem::path& source_path) {
+Graph compile(const ProgramSyntax& program, const std::filesystem::path& source_path,
+              std::string_view pipeline_name) {
+    const PipelineSyntax* selected = nullptr;
+    for (const auto& candidate : program.pipelines) {
+        if (pipeline_name.empty() || candidate.id == pipeline_name) {
+            if (selected != nullptr) {
+                if (pipeline_name.empty()) throw GraphError("multiple pipelines found; specify a pipeline name");
+                throw GraphError("duplicate pipeline name: " + std::string(pipeline_name));
+            }
+            selected = &candidate;
+        }
+    }
+    if (selected == nullptr) {
+        throw GraphError("unknown pipeline: " + std::string(pipeline_name));
+    }
+    const auto& pipeline = *selected;
     Graph graph;
     for (const auto& node : program.nodes) {
         NodeDefinition definition;
@@ -37,15 +52,15 @@ Graph compile(const ProgramSyntax& program, const std::filesystem::path& source_
             node.runtime, (source_path.parent_path() / node.target).lexically_normal().string()};
         graph.add_definition(std::move(definition));
     }
-    for (const auto& input : program.pipeline.inputs) graph.add_input(input.name, type_from_name(input.type));
-    for (const auto& instance : program.pipeline.instances) {
+    for (const auto& input : pipeline.inputs) graph.add_input(input.name, type_from_name(input.type));
+    for (const auto& instance : pipeline.instances) {
         NodeInstance compiled{instance.id, instance.definition, {}};
         for (const auto& [name, binding] : instance.arguments) {
             if (!compiled.inputs.emplace(name, compile_binding(binding)).second) throw GraphError("duplicate node argument: " + name);
         }
         graph.add_instance(std::move(compiled));
     }
-    for (const auto& output : program.pipeline.outputs) {
+    for (const auto& output : pipeline.outputs) {
         graph.add_output(output.name, type_from_name(output.type), compile_binding(output.binding));
     }
     graph.validate();

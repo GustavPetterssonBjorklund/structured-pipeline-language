@@ -1,13 +1,23 @@
 #pragma once
 
 #include <spl/Error.hpp>
+#include <spl/Type.hpp>
 
 #include <string>
+#include <vector>
 
 namespace spl::runtime {
 
+struct PortSpec {
+    std::string name;
+    Type type;
+    bool required = true;
+};
+
 struct ExecutionContext {
     std::string invocation_id;
+    std::vector<PortSpec> inputs;
+    std::vector<PortSpec> outputs;
 };
 
 struct Implementation {

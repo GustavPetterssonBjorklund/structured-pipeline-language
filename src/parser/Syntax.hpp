@@ -71,7 +71,7 @@ struct PipelineSyntax {
 
 struct ProgramSyntax {
     std::vector<NodeSyntax> nodes;
-    PipelineSyntax pipeline;
+    std::vector<PipelineSyntax> pipelines;
 };
 
 } // namespace spl::parser
