@@ -10,7 +10,7 @@
     in {
       devShells = forEachSystem (pkgs: {
         default = pkgs.mkShell {
-          packages = with pkgs; [ cmake gcc just python3 ];
+          packages = with pkgs; [ cmake gcc just nodejs typescript python3 ];
           shellHook = ''echo "SPL development shell"'';
         };
       });

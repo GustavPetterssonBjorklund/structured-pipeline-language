@@ -5,6 +5,7 @@
 #include <spl/Parser.hpp>
 #include <spl/PreparedGraph.hpp>
 #include <spl/runtime/PythonAdapter.hpp>
+#include <spl/runtime/JavaScriptAdapter.hpp>
 #include <spl/Observability.hpp>
 #include <spl/logging/Logger.hpp>
 
@@ -145,6 +146,7 @@ struct NativePipeline {
     NativePipeline(spl::PreparedGraph prepared, std::string package_path)
         : graph(std::move(prepared)) {
         runtimes.register_adapter(std::make_unique<spl::runtime::PythonAdapter>(std::move(package_path)));
+        runtimes.register_adapter(std::make_unique<spl::runtime::JavaScriptAdapter>());
     }
 };
 

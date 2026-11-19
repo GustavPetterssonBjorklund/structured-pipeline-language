@@ -45,6 +45,12 @@ through the embedded Python adapter. Python nodes import `spl` and receive
 typed SPL values directly; the active path does not serialize node inputs as
 JSON.
 
+JavaScript and TypeScript nodes use the explicit `javascript` runtime and are
+executed by Node.js. Targets use the same `file::export` form. The exported
+function receives one object whose fields are typed SPL wrapper values and
+returns one typed value, or `new spl.Outputs({...})` for multiple outputs.
+TypeScript files are compiled with `tsc` for each invocation.
+
 SPL source is compiled once into a binary artifact, then executed without
 reparsing the source. SPL types remain explicit at the Python boundary:
 
@@ -53,7 +59,7 @@ import spl
 
 pipeline = spl.build_pipeline("examples/pipeline.spl:Calculation")
 outputs = pipeline.run({"x": spl.Int64(3), "y": spl.Int64(4)})
-assert outputs["result"] == spl.Int64(14)
+assert outputs["result"] == spl.Int64(15)
 ```
 
 For a reproducible environment, prefer `nix develop` with the included

@@ -11,6 +11,7 @@ sources = [
     "src/parser/SyntaxParser.cpp",
     "src/spl.cpp",
     "src/runtime/PythonAdapter.cpp",
+    "src/runtime/JavaScriptAdapter.cpp",
     "src/logging/Logger.cpp",
     "src/logging/ConsoleSink.cpp",
     "src/logging/ConsoleFormatter.cpp",

@@ -5,6 +5,8 @@ pkgs.mkShell {
     cmake
     gcc
     just
+    nodejs
+    typescript
     python3
   ];
 

@@ -2,6 +2,7 @@
 #include <spl/Parser.hpp>
 #include <spl/PreparedGraph.hpp>
 #include <spl/runtime/PythonAdapter.hpp>
+#include <spl/runtime/JavaScriptAdapter.hpp>
 #include <spl/logging/Logger.hpp>
 #include <spl/logging/ConsoleSink.hpp>
 #include <spl/trace/ConsoleTraceSink.hpp>
@@ -48,6 +49,7 @@ int main(int argc, char** argv) {
         spl::Values inputs{{"x", spl::Value{std::int64_t{3}}}, {"y", spl::Value{std::int64_t{4}}}};
         spl::runtime::RuntimeRegistry runtimes;
         runtimes.register_adapter(std::make_unique<spl::runtime::PythonAdapter>());
+        runtimes.register_adapter(std::make_unique<spl::runtime::JavaScriptAdapter>());
         const auto graph = pipeline.extension() == ".splb"
             ? spl::read_pipeline_artifact(pipeline)
             : spl::parse_pipeline_file(pipeline);

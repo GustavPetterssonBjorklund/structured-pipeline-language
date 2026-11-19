@@ -1,4 +1,4 @@
-// Example SPL pipeline using two typed, embedded Python nodes.
+// Example SPL pipeline using Python, JavaScript, and TypeScript nodes.
 
 node Add {
     input a: Int64
@@ -13,7 +13,14 @@ node Multiply {
     input b: Int64
     output product: Int64
 
-    impl python "python_nodes/math_nodes.py::multiply"
+    impl javascript "javascript_nodes/math_nodes.js::multiply"
+}
+
+node Increment {
+    input value: Int64
+    output result: Int64
+
+    impl javascript "typescript_nodes/math_nodes.ts::increment"
 }
 
 pipeline Calculation {
@@ -23,6 +30,7 @@ pipeline Calculation {
 
     use sum: Add(a = x, b = y)
     use product: Multiply(a = sum.sum, b = 2)
+    use increment: Increment(value = product.product)
 
-    result = product.product
+    result = increment.result
 }

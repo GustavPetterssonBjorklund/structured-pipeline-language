@@ -13,6 +13,7 @@ add_library(spl_core STATIC
     src/parser/SyntaxParser.cpp
     src/spl.cpp
     src/runtime/PythonAdapter.cpp
+    src/runtime/JavaScriptAdapter.cpp
     src/logging/Logger.cpp
     src/logging/ConsoleSink.cpp
     src/logging/ConsoleFormatter.cpp
@@ -40,6 +41,7 @@ set(SPL_TEST_TARGETS
     spl_parser_test
     spl_artifact_test
     spl_python_runtime_test
+    spl_javascript_runtime_test
     spl_observability_test
 )
 
@@ -49,6 +51,7 @@ add_executable(spl_error_test tests/error_test.cpp)
 add_executable(spl_parser_test tests/parser_test.cpp)
 add_executable(spl_artifact_test tests/artifact_test.cpp)
 add_executable(spl_python_runtime_test tests/python_runtime_test.cpp)
+add_executable(spl_javascript_runtime_test tests/javascript_runtime_test.cpp)
 add_executable(spl_observability_test tests/observability_test.cpp)
 
 foreach(test_target IN LISTS SPL_TEST_TARGETS)
@@ -66,9 +69,23 @@ add_test(NAME spl_error COMMAND spl_error_test)
 add_test(NAME spl_parser COMMAND spl_parser_test)
 add_test(NAME spl_artifact COMMAND spl_artifact_test)
 add_test(NAME spl_python_runtime COMMAND spl_python_runtime_test)
+find_program(SPL_NODE_EXECUTABLE node)
+find_program(SPL_TSC_EXECUTABLE tsc)
+if (SPL_NODE_EXECUTABLE)
+    add_test(NAME spl_javascript_runtime COMMAND spl_javascript_runtime_test)
+    if (SPL_TSC_EXECUTABLE)
+        add_test(NAME spl_typescript_runtime COMMAND spl_javascript_runtime_test typescript)
+    endif()
+endif()
 add_test(NAME spl_observability COMMAND spl_observability_test)
 add_test(NAME spl_python_example COMMAND spl-run ${CMAKE_CURRENT_SOURCE_DIR}/examples/pipeline.spl)
 set_tests_properties(
     spl_value spl_graph spl_error spl_parser spl_artifact spl_python_runtime spl_observability spl_python_example
     PROPERTIES WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
 )
+if (SPL_NODE_EXECUTABLE)
+    set_tests_properties(spl_javascript_runtime PROPERTIES WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR})
+    if (SPL_TSC_EXECUTABLE)
+        set_tests_properties(spl_typescript_runtime PROPERTIES WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR})
+    endif()
+endif()
