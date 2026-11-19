@@ -15,14 +15,14 @@ build:
 test: build
     ctest --test-dir build --output-on-failure
 
-# Create the local Python environment and install SPL into it.
+# Create the local Python environment and install SPL only when its inputs changed.
 venv:
-    python3 -m venv --upgrade-deps .venv
-    .venv/bin/python -m pip install -e .
+    test -x .venv/bin/python || python3 -m venv --upgrade-deps .venv
+    if test ! -f .venv/.spl-installed || test setup.py -nt .venv/.spl-installed || test pyproject.toml -nt .venv/.spl-installed || find adapters/python/spl src include -type f \( -name '*.cpp' -o -name '*.hpp' \) -newer .venv/.spl-installed -print -quit | grep -q .; then .venv/bin/python -m pip install -e . && touch .venv/.spl-installed; fi
 
 # Compile the example source into a run-time artifact.
 build-example: venv
-    .venv/bin/python -c 'import spl; spl.build_pipeline("examples/pipeline.spl:Calculation")'
+    if test ! -f examples/pipeline.Calculation.splb || test examples/pipeline.spl -nt examples/pipeline.Calculation.splb; then .venv/bin/python -c 'import spl; spl.build_pipeline("examples/pipeline.spl:Calculation")'; fi
 
 # Execute the compiled SPL example through the typed Python package.
 example: build-example
