@@ -23,8 +23,8 @@ pipeline Calculation {
     input y: Int64
     output result: Int64
 
-    let sum = Add(a = x, b = y)
-    let product = Multiply(a = sum.sum, b = 2)
+    use sum: Add(a = x, b = y)
+    use product: Multiply(a = sum.sum, b = 2)
 
     result = product.product
 }

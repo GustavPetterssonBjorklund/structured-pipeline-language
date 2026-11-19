@@ -74,6 +74,7 @@ An important architectural test is a **semantic round-trip** between source, IR,
 - SPL source and the visual editor are projections of SPL-IR.
 - Stage 1 supports acyclic dataflow graphs only.
 - Stage 1 uses explicit primitive types: `Bool`, `Int64`, `Float64`, and `String`.
+- Graph instances use explicit declarations; SPL does not use `let` or infer a node definition from an assignment.
 - Implicit conversions are disabled by default; conversions must be explicit.
 - Nodes are stateless and side-effect-free by default.
 - Runtime failures are separate from ordinary values; domain-level failures may use `Result<T, E>`.
@@ -239,10 +240,10 @@ Prefer declarative graph construction for the first version. Add explicit contro
 pipeline Research {
     input topic: String
 
-    use web = SearchWeb(topic)
-    use docs = SearchDatabase(topic)
+    use web: SearchWeb(topic)
+    use docs: SearchDatabase(topic)
 
-    use report = Synthesize(
+    use report: Synthesize(
         web_results = web.results,
         documents = docs.results
     )
@@ -270,9 +271,9 @@ node Research {
     input topic: String
     output report: Report
 
-    use sources = Search(topic)
-    use analysis = Analyze(sources.data)
-    use summary = Summarize(analysis.result)
+    use sources: Search(topic)
+    use analysis: Analyze(sources.data)
+    use summary: Summarize(analysis.result)
 
     report = summary.report
 }
@@ -286,8 +287,8 @@ Stage 1 rejects cycles. Later, prefer explicit iteration/stateful subgraph const
 
 ```spl
 // Future feature, not Stage 1
-use result = repeat(max = 5) {
-    use analysis = Analyze(state)
+use result: ResearchResult = repeat(max = 5) {
+    use analysis: Analysis = Analyze(state)
 
     if analysis.done {
         break analysis.answer
@@ -355,7 +356,7 @@ node Add {
     output result: Int;
 }
 
-let sum = Add(a = 2, b = 3);
+use sum: Add(a = 2, b = 3);
 ```
 
 Pros: familiar structure and clear boundaries. Syntax details such as semicolons still need deciding.
@@ -468,8 +469,8 @@ pipeline Calculation {
     input y: Int
     output result: Int
 
-    let sum = Add(a = x, b = y)
-    let product = Multiply(a = sum.result, b = 2)
+    use sum: Add(a = x, b = y)
+    use product: Multiply(a = sum.result, b = 2)
 
     result = product.result
 }
