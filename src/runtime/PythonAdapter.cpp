@@ -44,17 +44,24 @@ PyObject* raw_python_value(const Value& value) {
                                        static_cast<Py_ssize_t>(value.get<std::string>().size()));
 }
 
-PyObject* spl_value(const Value& value) {
-    PyObject* module = PyImport_ImportModule("spl");
-    require_python_call(module, "cannot import spl");
-    PyObject* type = PyObject_GetAttrString(module, std::string(type_name(value.type())).c_str());
-    Py_DECREF(module);
-    require_python_call(type, "spl is missing a value type");
+PyObject* spl_value(const Value& value, std::map<std::string, PyObject*>& value_types) {
+    const auto type_name_text = std::string(type_name(value.type()));
+    auto cached = value_types.find(type_name_text);
+    PyObject* type = nullptr;
+    if (cached != value_types.end()) {
+        type = cached->second;
+    } else {
+        PyObject* module = PyImport_ImportModule("spl");
+        require_python_call(module, "cannot import spl");
+        type = PyObject_GetAttrString(module, type_name_text.c_str());
+        Py_DECREF(module);
+        require_python_call(type, "spl is missing a value type");
+        value_types.emplace(type_name_text, type);
+    }
     PyObject* raw = raw_python_value(value);
     require_python_call(raw, "cannot create Python value");
     PyObject* result = PyObject_CallFunctionObjArgs(type, raw, nullptr);
     Py_DECREF(raw);
-    Py_DECREF(type);
     require_python_call(result, "cannot construct SPL value");
     return result;
 }
@@ -171,7 +178,19 @@ PythonAdapter::PythonAdapter(std::string python_package_path)
     if (!Py_IsInitialized()) Py_Initialize();
 }
 
-PythonAdapter::~PythonAdapter() = default;
+PythonAdapter::~PythonAdapter() {
+    if (!Py_IsInitialized()) return;
+    const auto gil = PyGILState_Ensure();
+    for (const auto& [target, function] : functions_) {
+        (void)target;
+        Py_DECREF(function);
+    }
+    for (const auto& [type, value_type] : value_types_) {
+        (void)type;
+        Py_DECREF(value_type);
+    }
+    PyGILState_Release(gil);
+}
 
 std::string PythonAdapter::id() const { return "python"; }
 
@@ -181,16 +200,25 @@ NodeResult PythonAdapter::invoke(
     const ExecutionContext& context) {
     const auto gil = PyGILState_Ensure();
     try {
-        add_package_path(python_package_path_);
-        PyObject* function = load_function(implementation.target);
+        if (!package_path_added_) {
+            add_package_path(python_package_path_);
+            package_path_added_ = true;
+        }
+        PyObject* function = nullptr;
+        const auto cached = functions_.find(implementation.target);
+        if (cached != functions_.end()) {
+            function = cached->second;
+        } else {
+            function = load_function(implementation.target);
+            functions_.emplace(implementation.target, function);
+        }
         PyObject* kwargs = PyDict_New();
         require_python_call(kwargs, "cannot create Python arguments");
         for (const auto& [name, value] : inputs) {
-            PyObject* argument = spl_value(value);
+            PyObject* argument = spl_value(value, value_types_);
             if (PyDict_SetItemString(kwargs, name.c_str(), argument) != 0) {
                 Py_DECREF(argument);
                 Py_DECREF(kwargs);
-                Py_DECREF(function);
                 throw_python_error("cannot build Python arguments");
             }
             Py_DECREF(argument);
@@ -200,7 +228,6 @@ NodeResult PythonAdapter::invoke(
         PyObject* result = PyObject_Call(function, positional, kwargs);
         Py_DECREF(positional);
         Py_DECREF(kwargs);
-        Py_DECREF(function);
         require_python_call(result, "Python node failed");
 
         Values outputs;

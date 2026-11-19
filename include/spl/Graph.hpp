@@ -17,6 +17,8 @@
 
 namespace spl {
 
+class PreparedGraph;
+
 enum class PortDirection { Input, Output };
 
 struct Port {
@@ -106,6 +108,7 @@ Graph read_pipeline_artifact(const std::filesystem::path& path);
 
 class Graph {
 public:
+    PreparedGraph prepare() const;
     const std::map<std::string, Type>& input_types() const noexcept { return inputs_; }
 
     std::map<std::string, Type> output_types() const {
@@ -283,6 +286,7 @@ public:
     }
 
 private:
+    friend class PreparedGraph;
     friend void write_pipeline_artifact(const Graph&, const std::filesystem::path&);
     friend Graph read_pipeline_artifact(const std::filesystem::path&);
 

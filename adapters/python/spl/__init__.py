@@ -131,7 +131,9 @@ class Pipeline:
         if _native is None:
             raise SPLException("the native SPL Python extension is not installed")
         try:
-            info = _native.pipeline_info(str(self.path))
+            self._handle, info = _native.load_pipeline(
+                str(self.path), str(Path(__file__).parent.parent),
+            )
         except _native.Error as error:
             raise SPLException(str(error)) from None
         self.inputs = {name: _TYPES[type_name] for name, type_name in info["inputs"].items()}
@@ -150,7 +152,7 @@ class Pipeline:
             raise SPLException(f"unknown pipeline input: {unknown[0]}")
         try:
             raw = _native.run_pipeline(
-                str(self.path), str(Path(__file__).parent.parent), inputs,
+                self._handle, inputs,
             )
         except _native.Error as error:
             raise SPLException(str(error)) from None
@@ -167,10 +169,17 @@ def build_pipeline(spec, output=None):
     output = Path(output)
     output.parent.mkdir(parents=True, exist_ok=True)
     try:
-        _native.build_pipeline(str(path), name, str(output))
+        handle, info = _native.build_pipeline(
+            str(path), name, str(output), str(Path(__file__).parent.parent),
+        )
     except _native.Error as error:
         raise SPLException(str(error)) from None
-    return Pipeline(output)
+    pipeline = Pipeline.__new__(Pipeline)
+    pipeline.path = output
+    pipeline._handle = handle
+    pipeline.inputs = {name: _TYPES[type_name] for name, type_name in info["inputs"].items()}
+    pipeline.outputs = {name: _TYPES[type_name] for name, type_name in info["outputs"].items()}
+    return pipeline
 
 
 def load_pipeline(artifact):

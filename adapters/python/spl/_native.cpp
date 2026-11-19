@@ -3,6 +3,7 @@
 
 #include <spl/Artifact.hpp>
 #include <spl/Parser.hpp>
+#include <spl/PreparedGraph.hpp>
 #include <spl/runtime/PythonAdapter.hpp>
 
 #include <cstdint>
@@ -13,6 +14,21 @@
 namespace {
 
 PyObject* native_error = nullptr;
+constexpr const char* pipeline_capsule_name = "spl.PreparedPipeline";
+
+struct NativePipeline {
+    spl::PreparedGraph graph;
+    spl::runtime::RuntimeRegistry runtimes;
+
+    NativePipeline(spl::PreparedGraph prepared, std::string package_path)
+        : graph(std::move(prepared)) {
+        runtimes.register_adapter(std::make_unique<spl::runtime::PythonAdapter>(std::move(package_path)));
+    }
+};
+
+void destroy_pipeline(PyObject* capsule) {
+    delete static_cast<NativePipeline*>(PyCapsule_GetPointer(capsule, pipeline_capsule_name));
+}
 
 std::string pipeline_name(PyObject* object) {
     if (object == Py_None) return {};
@@ -86,19 +102,36 @@ PyObject* type_map(const std::map<std::string, spl::Type>& values) {
     return result;
 }
 
+PyObject* pipeline_metadata(const spl::PreparedGraph& graph) {
+    PyObject* result = PyDict_New();
+    PyObject* inputs = type_map(graph.input_types());
+    PyObject* outputs = type_map(graph.output_types());
+    PyDict_SetItemString(result, "inputs", inputs);
+    PyDict_SetItemString(result, "outputs", outputs);
+    Py_DECREF(inputs);
+    Py_DECREF(outputs);
+    return result;
+}
+
+PyObject* make_pipeline(spl::PreparedGraph graph, std::string package_path) {
+    auto* native = new NativePipeline(std::move(graph), std::move(package_path));
+    PyObject* capsule = PyCapsule_New(native, pipeline_capsule_name, destroy_pipeline);
+    if (!capsule) {
+        delete native;
+        return nullptr;
+    }
+    PyObject* metadata = pipeline_metadata(native->graph);
+    PyObject* result = PyTuple_New(2);
+    PyTuple_SET_ITEM(result, 0, capsule);
+    PyTuple_SET_ITEM(result, 1, metadata);
+    return result;
+}
+
 PyObject* pipeline_info(PyObject*, PyObject* args) {
     const char* path = nullptr;
     if (!PyArg_ParseTuple(args, "s:pipeline_info", &path)) return nullptr;
     try {
-        const auto graph = spl::read_pipeline_artifact(path);
-        PyObject* result = PyDict_New();
-        PyObject* inputs = type_map(graph.input_types());
-        PyObject* outputs = type_map(graph.output_types());
-        PyDict_SetItemString(result, "inputs", inputs);
-        PyDict_SetItemString(result, "outputs", outputs);
-        Py_DECREF(inputs);
-        Py_DECREF(outputs);
-        return result;
+        return pipeline_metadata(spl::read_pipeline_artifact(path).prepare());
     } catch (const std::exception& error) {
         PyErr_SetString(native_error, error.what());
         return nullptr;
@@ -109,11 +142,24 @@ PyObject* build_pipeline(PyObject*, PyObject* args) {
     const char* source = nullptr;
     PyObject* name = nullptr;
     const char* artifact = nullptr;
-    if (!PyArg_ParseTuple(args, "sOs:build_pipeline", &source, &name, &artifact)) return nullptr;
+    const char* package_path = nullptr;
+    if (!PyArg_ParseTuple(args, "sOss:build_pipeline", &source, &name, &artifact, &package_path)) return nullptr;
     try {
         const auto graph = spl::parse_pipeline_file(source, pipeline_name(name));
         spl::write_pipeline_artifact(graph, artifact);
-        Py_RETURN_NONE;
+        return make_pipeline(graph.prepare(), package_path);
+    } catch (const std::exception& error) {
+        PyErr_SetString(native_error, error.what());
+        return nullptr;
+    }
+}
+
+PyObject* load_pipeline(PyObject*, PyObject* args) {
+    const char* artifact = nullptr;
+    const char* package_path = nullptr;
+    if (!PyArg_ParseTuple(args, "ss:load_pipeline", &artifact, &package_path)) return nullptr;
+    try {
+        return make_pipeline(spl::read_pipeline_artifact(artifact).prepare(), package_path);
     } catch (const std::exception& error) {
         PyErr_SetString(native_error, error.what());
         return nullptr;
@@ -121,35 +167,33 @@ PyObject* build_pipeline(PyObject*, PyObject* args) {
 }
 
 PyObject* run_pipeline(PyObject*, PyObject* args) {
-    const char* path = nullptr;
-    const char* package_path = nullptr;
+    PyObject* capsule = nullptr;
     PyObject* input_dict = nullptr;
-    if (!PyArg_ParseTuple(args, "ssO:run_pipeline", &path, &package_path, &input_dict)) return nullptr;
+    if (!PyArg_ParseTuple(args, "OO:run_pipeline", &capsule, &input_dict)) return nullptr;
     if (!PyDict_Check(input_dict)) {
         PyErr_SetString(PyExc_TypeError, "inputs must be a dict");
         return nullptr;
     }
     try {
-        const auto graph = spl::read_pipeline_artifact(path);
+        auto* pipeline = static_cast<NativePipeline*>(PyCapsule_GetPointer(capsule, pipeline_capsule_name));
+        if (!pipeline) return nullptr;
         spl::Values inputs;
-        for (const auto& [input_name, type] : graph.input_types()) {
+        for (const auto& [input_name, type] : pipeline->graph.input_types()) {
             PyObject* item = PyDict_GetItemString(input_dict, input_name.c_str());
             if (!item) throw std::invalid_argument("missing pipeline input: " + input_name);
             inputs.emplace(input_name, to_value(item, type, input_name));
         }
-        if (PyDict_Size(input_dict) != static_cast<Py_ssize_t>(graph.input_types().size())) {
+        if (PyDict_Size(input_dict) != static_cast<Py_ssize_t>(pipeline->graph.input_types().size())) {
             PyObject *key, *value;
             Py_ssize_t position = 0;
             while (PyDict_Next(input_dict, &position, &key, &value)) {
                 const auto key_text = PyUnicode_Check(key) ? PyUnicode_AsUTF8(key) : nullptr;
-                if (!key_text || !graph.input_types().contains(key_text)) {
+                if (!key_text || !pipeline->graph.input_types().contains(key_text)) {
                     throw std::invalid_argument("unknown pipeline input");
                 }
             }
         }
-        spl::runtime::RuntimeRegistry runtimes;
-        runtimes.register_adapter(std::make_unique<spl::runtime::PythonAdapter>(package_path));
-        const auto result = graph.execute(inputs, &runtimes);
+        const auto result = pipeline->graph.execute(inputs, &pipeline->runtimes);
         if (!result.succeeded()) throw std::runtime_error(result.error->to_string());
         PyObject* outputs = PyDict_New();
         for (const auto& [name_text, value] : result.outputs) {
@@ -168,6 +212,7 @@ PyObject* run_pipeline(PyObject*, PyObject* args) {
 
 PyMethodDef methods[] = {
     {"build_pipeline", build_pipeline, METH_VARARGS, "Compile an SPL source file into an artifact."},
+    {"load_pipeline", load_pipeline, METH_VARARGS, "Load and prepare a compiled SPL artifact."},
     {"pipeline_info", pipeline_info, METH_VARARGS, "Inspect pipeline input and output types."},
     {"run_pipeline", run_pipeline, METH_VARARGS, "Execute a typed SPL pipeline."},
     {nullptr, nullptr, 0, nullptr},

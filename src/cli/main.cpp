@@ -1,5 +1,6 @@
 #include <spl/Artifact.hpp>
 #include <spl/Parser.hpp>
+#include <spl/PreparedGraph.hpp>
 #include <spl/runtime/PythonAdapter.hpp>
 
 #include <iostream>
@@ -14,7 +15,7 @@ int main(int argc, char** argv) {
         const auto graph = pipeline.extension() == ".splb"
             ? spl::read_pipeline_artifact(pipeline)
             : spl::parse_pipeline_file(pipeline);
-        const auto result = graph.execute(inputs, &runtimes);
+        const auto result = graph.prepare().execute(inputs, &runtimes);
         if (!result.succeeded()) {
             std::cerr << result.error->to_string() << '\n';
             return 1;

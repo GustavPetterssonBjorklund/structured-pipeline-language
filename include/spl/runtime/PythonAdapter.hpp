@@ -2,6 +2,10 @@
 
 #include "RuntimeAdapter.hpp"
 
+#include <map>
+
+struct _object;
+
 namespace spl::runtime {
 
 class PythonAdapter final : public RuntimeAdapter {
@@ -18,6 +22,9 @@ public:
 
 private:
     std::string python_package_path_;
+    std::map<std::string, _object*> functions_;
+    std::map<std::string, _object*> value_types_;
+    bool package_path_added_ = false;
 };
 
 } // namespace spl::runtime

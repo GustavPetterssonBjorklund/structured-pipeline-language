@@ -6,6 +6,7 @@ find_package(Python3 COMPONENTS Development.Embed REQUIRED)
 
 add_library(spl_core STATIC
     src/Artifact.cpp
+    src/PreparedGraph.cpp
     src/Parser.cpp
     src/parser/Compiler.cpp
     src/parser/Lexer.cpp
