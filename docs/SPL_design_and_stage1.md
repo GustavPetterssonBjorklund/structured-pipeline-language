@@ -449,7 +449,7 @@ Suggested tools:
 |---|---|
 | Core engine | C++20 |
 | Build system | CMake |
-| Parser | Handwritten lexer / recursive descent |
+| Parser | Location-aware lexer, recursive-descent syntax parser, and graph compiler |
 | Type system | C++ tagged values + SPL schemas |
 | Scheduler | Initially simple dependency scheduler; thread pool later |
 | Native nodes | Direct C++ functions |

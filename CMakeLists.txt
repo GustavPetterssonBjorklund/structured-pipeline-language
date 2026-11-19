@@ -4,6 +4,9 @@ project(SPL VERSION 0.1 LANGUAGES CXX)
 
 add_library(spl_core STATIC
     src/Parser.cpp
+    src/parser/Compiler.cpp
+    src/parser/Lexer.cpp
+    src/parser/SyntaxParser.cpp
     src/spl.cpp
     src/runtime/PythonAdapter.cpp
 )

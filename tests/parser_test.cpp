@@ -15,4 +15,10 @@ int main() {
     require(literals.execute({}).outputs.at("flag").get<bool>(), "bool literal was not parsed");
     require(literals.execute({}).outputs.at("score").get<double>() == 3.5, "float literal was not parsed");
     require(literals.execute({}).outputs.at("label").get<std::string>() == "hello", "string literal was not parsed");
+
+    const auto from_source = parse_pipeline(
+        "pipeline Inline { output answer: Int64 answer = 42 }",
+        std::filesystem::path{"tests/fixtures/inline.spl"});
+    require(from_source.execute({}).outputs.at("answer").get<std::int64_t>() == 42,
+            "source-string parser entry point failed");
 }
