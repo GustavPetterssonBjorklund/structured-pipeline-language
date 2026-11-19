@@ -27,7 +27,11 @@ public:
         : definition_id_(definition.id), fields_(std::move(fields)) {
         if (definition.id.empty()) throw std::invalid_argument("error definition must have an id");
 
+        std::map<std::string, bool> declared_fields;
         for (const auto& field : definition.fields) {
+            if (!declared_fields.emplace(field.name, true).second) {
+                throw std::invalid_argument("duplicate error field: " + field.name);
+            }
             const auto value = fields_.find(field.name);
             if (value == fields_.end()) {
                 throw std::invalid_argument("missing error field: " + field.name);

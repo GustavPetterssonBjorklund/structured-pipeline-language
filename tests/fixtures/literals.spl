@@ -1,0 +1,9 @@
+pipeline Literals {
+    output flag: Bool
+    output score: Float64
+    output label: String
+
+    flag = true
+    score = 3.5
+    label = "hello"
+}

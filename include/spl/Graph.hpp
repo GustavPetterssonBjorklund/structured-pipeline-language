@@ -81,6 +81,11 @@ struct TraceEvent {
     std::optional<ErrorValue> typed_error;
 };
 
+struct PipelineOutput {
+    std::optional<Type> type;
+    Binding binding;
+};
+
 struct ExecutionResult {
     Values outputs;
     std::vector<TraceEvent> trace;
@@ -110,6 +115,12 @@ public:
     void add_error_definition(ErrorDefinition definition) {
         if (definition.id.empty()) throw GraphError("error definition must have an id");
         if (errors_.contains(definition.id)) throw GraphError("duplicate error definition: " + definition.id);
+        std::set<std::string> fields;
+        for (const auto& field : definition.fields) {
+            if (field.name.empty() || !fields.insert(field.name).second) {
+                throw GraphError("duplicate or empty error field in: " + definition.id);
+            }
+        }
         errors_.emplace(std::move(definition.id), std::move(definition));
     }
 
@@ -120,7 +131,12 @@ public:
 
     void add_output(std::string name, Binding binding) {
         if (outputs_.contains(name)) throw GraphError("duplicate pipeline output: " + name);
-        outputs_.emplace(std::move(name), std::move(binding));
+        outputs_.emplace(std::move(name), PipelineOutput{std::nullopt, std::move(binding)});
+    }
+
+    void add_output(std::string name, Type type, Binding binding) {
+        if (outputs_.contains(name)) throw GraphError("duplicate pipeline output: " + name);
+        outputs_.emplace(std::move(name), PipelineOutput{type, std::move(binding)});
     }
 
     void add_instance(NodeInstance instance) {
@@ -153,8 +169,9 @@ public:
                 (void)binding;
             }
         }
-        for (const auto& [name, binding] : outputs_) {
-            validate_output_binding(name, binding);
+        for (const auto& [name, output] : outputs_) {
+            validate_output_binding(name, output.binding);
+            if (output.type) validate_output_type(name, output.binding, *output.type);
         }
         (void)topological_order();
     }
@@ -210,6 +227,12 @@ public:
                     return result;
                 }
                 auto outputs = std::get<Values>(std::move(node_result));
+                for (const auto& [name, value] : outputs) {
+                    (void)value;
+                    if (!definition.port(name, PortDirection::Output)) {
+                        throw GraphError("unexpected output '" + name + "' from node '" + node_id + "'");
+                    }
+                }
                 for (const auto& port : definition.ports) {
                     if (port.direction != PortDirection::Output) continue;
                     const auto output = outputs.find(port.name);
@@ -228,8 +251,10 @@ public:
             result.trace.push_back(std::move(event));
         }
 
-        for (const auto& [name, binding] : outputs_) {
-            result.outputs.emplace(name, resolve(binding, pipeline_inputs, node_outputs));
+        for (const auto& [name, output] : outputs_) {
+            const auto value = resolve(output.binding, pipeline_inputs, node_outputs);
+            if (output.type) require_type(value, *output.type, "pipeline output '" + name + "'");
+            result.outputs.emplace(name, value);
         }
         return result;
     }
@@ -271,6 +296,21 @@ private:
             if (!definitions_.at(node->second.definition_id).port(binding.port_name, PortDirection::Output)) {
                 throw GraphError("unknown output: " + binding.node_id + "." + binding.port_name);
             }
+        }
+    }
+
+    void validate_output_type(const std::string& name, const Binding& binding, Type expected) const {
+        if (binding.kind == Binding::Kind::Literal) require_type(binding.literal, expected, "pipeline output '" + name + "'");
+        if (binding.kind == Binding::Kind::PipelineInput) {
+            const auto input = inputs_.find(binding.name);
+            if (input != inputs_.end() && input->second != expected) {
+                throw GraphError("type mismatch for pipeline output '" + name + "'");
+            }
+        }
+        if (binding.kind == Binding::Kind::NodeOutput) {
+            const auto& instance = instances_.at(binding.node_id);
+            const auto* port = definitions_.at(instance.definition_id).port(binding.port_name, PortDirection::Output);
+            if (port && port->type != expected) throw GraphError("type mismatch for pipeline output '" + name + "'");
         }
     }
 
@@ -316,7 +356,7 @@ private:
     std::map<std::string, ErrorDefinition> errors_;
     std::map<std::string, Type> inputs_;
     std::map<std::string, NodeInstance> instances_;
-    std::map<std::string, Binding> outputs_;
+    std::map<std::string, PipelineOutput> outputs_;
 };
 
 } // namespace spl

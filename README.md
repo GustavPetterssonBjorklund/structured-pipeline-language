@@ -29,6 +29,10 @@ Then run the full C++ verification flow:
 just
 ```
 
+The CTest suite is split by subsystem: value, graph, typed-error, parser, and
+Python-runtime tests, plus the CLI example smoke test. Run one group with, for
+example, `ctest --test-dir build -R spl_parser --output-on-failure`.
+
 Run the current Python-backed example with:
 
 ```bash
@@ -36,4 +40,9 @@ just example
 ```
 
 The current example is executed by the C++ SPL engine and dispatches its nodes
-through the Python runtime worker.
+through the Python runtime worker. The Python boundary uses versioned typed
+JSON envelopes for primitive SPL values.
+
+For a reproducible environment, prefer `nix develop` with the included
+`flake.nix`; a regular system with CMake, a C++20 compiler, Python 3, and Just
+is also supported.

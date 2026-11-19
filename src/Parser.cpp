@@ -35,6 +35,22 @@ Binding parse_binding(const std::string& text) {
     if (std::regex_match(value, std::regex("-?[0-9]+"))) {
         return Binding::literal_value(Value{static_cast<std::int64_t>(std::stoll(value))});
     }
+    if (value == "true" || value == "false") {
+        return Binding::literal_value(Value{value == "true"});
+    }
+    if (std::regex_match(value, std::regex(R"(-?(?:[0-9]+\.[0-9]*|[0-9]*\.[0-9]+))"))) {
+        return Binding::literal_value(Value{std::stod(value)});
+    }
+    if (value.size() >= 2 && value.front() == '"' && value.back() == '"') {
+        std::string decoded;
+        for (std::size_t i = 1; i + 1 < value.size(); ++i) {
+            if (value[i] == '\\' && i + 1 < value.size() - 1) {
+                const auto escaped = value[++i];
+                decoded += escaped == 'n' ? '\n' : escaped == 't' ? '\t' : escaped;
+            } else decoded += value[i];
+        }
+        return Binding::literal_value(Value{std::move(decoded)});
+    }
     const auto dot = value.find('.');
     if (dot != std::string::npos) {
         return Binding::node_output(value.substr(0, dot), value.substr(dot + 1));
@@ -101,12 +117,22 @@ Graph parse_pipeline_file(const std::filesystem::path& path) {
     }
 
     const std::regex output_pattern(R"(output\s+([A-Za-z_][A-Za-z0-9_]*)\s*:\s*(Int64|Float64|Bool|String))");
-    const std::regex assignment_pattern(R"(\n\s*([A-Za-z_][A-Za-z0-9_]*)\s*=\s*([A-Za-z_][A-Za-z0-9_]*\.[A-Za-z_][A-Za-z0-9_]*)\s*(?:\n|$))");
-    std::smatch output;
-    if (!std::regex_search(body, output, output_pattern)) throw GraphError("pipeline has no output declaration");
-    std::smatch assignment;
-    if (!std::regex_search(body, assignment, assignment_pattern)) throw GraphError("pipeline has no output assignment");
-    graph.add_output(output[1].str(), parse_binding(assignment[2].str()));
+    bool has_output = false;
+    for (std::sregex_iterator it(body.begin(), body.end(), output_pattern), end; it != end; ++it) {
+        has_output = true;
+        const auto name = (*it)[1].str();
+        const auto type_name = (*it)[2].str();
+        const auto type = type_name == "Int64" ? Type::Int64
+            : type_name == "Float64" ? Type::Float64
+            : type_name == "Bool" ? Type::Bool : Type::String;
+        const std::regex assignment("\\b" + name + R"(\s*=\s*([^\s]+))");
+        std::smatch match;
+        if (!std::regex_search(body, match, assignment)) {
+            throw GraphError("pipeline output has no assignment: " + name);
+        }
+        graph.add_output(name, type, parse_binding(match[1].str()));
+    }
+    if (!has_output) throw GraphError("pipeline has no output declaration");
     graph.validate();
     return graph;
 }
