@@ -1,4 +1,4 @@
-import type { Int64 } from "../../adapters/javascript/spl/index";
+import type { Int64 } from "@structured-pipeline-language/spl";
 
 export function add({ a, b }: { a: Int64; b: Int64 }): Int64 {
   return a.add(b);

@@ -51,6 +51,19 @@ function receives one object whose fields are typed SPL wrapper values and
 returns one typed value, or `new spl.Outputs({...})` for multiple outputs.
 TypeScript files are compiled with `tsc` for each invocation.
 
+The JavaScript/TypeScript adapter is also available as the npm package
+`@structured-pipeline-language/spl`:
+
+```bash
+npm install @structured-pipeline-language/spl
+```
+
+TypeScript nodes can import SPL types without reaching into this repository:
+
+```typescript
+import type { Int64 } from "@structured-pipeline-language/spl";
+```
+
 SPL source is compiled once into a binary artifact, then executed without
 reparsing the source. SPL types remain explicit at the Python boundary:
 

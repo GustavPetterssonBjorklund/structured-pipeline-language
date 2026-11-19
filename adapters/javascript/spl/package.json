@@ -1,0 +1,22 @@
+{
+  "name": "@structured-pipeline-language/spl",
+  "version": "0.1.0",
+  "description": "JavaScript and TypeScript values for the Structured Pipeline Language",
+  "main": "./index.cjs",
+  "types": "./index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./index.d.ts",
+      "require": "./index.cjs",
+      "default": "./index.cjs"
+    }
+  },
+  "files": [
+    "index.cjs",
+    "index.d.ts"
+  ],
+  "engines": {
+    "node": ">=18"
+  },
+  "license": "MIT"
+}

@@ -16,7 +16,22 @@ function loadTarget(target) {
   const name = target.slice(separator + 2);
   if (source.endsWith(".ts")) {
     const output = fs.mkdtempSync(path.join(require("os").tmpdir(), "spl-ts-"));
-    const compile = spawnSync("tsc", [source, "--outDir", output, "--target", "ES2020", "--module", "commonjs", "--esModuleInterop", "--skipLibCheck"], { encoding: "utf8" });
+    const packageRoot = path.resolve(__dirname, "../../adapters/javascript");
+    const config = path.join(output, "tsconfig.json");
+    fs.writeFileSync(config, JSON.stringify({
+      compilerOptions: {
+        outDir: output,
+        rootDir: path.dirname(source),
+        target: "ES2020",
+        module: "commonjs",
+        esModuleInterop: true,
+        skipLibCheck: true,
+        baseUrl: packageRoot,
+        paths: { "@structured-pipeline-language/spl": ["spl"] },
+      },
+      files: [source],
+    }));
+    const compile = spawnSync("tsc", ["--project", config], { encoding: "utf8" });
     if (compile.status !== 0) throw new Error(`TypeScript compilation failed: ${compile.stderr || compile.stdout}`);
     const compiled = path.join(output, path.basename(source, ".ts") + ".js");
     return { module: require(compiled), name };
