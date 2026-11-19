@@ -102,7 +102,11 @@ ExecutionResult PreparedGraph::execute(
         }
         try {
             NodeResult node_result;
-            if (definition.runtime_implementation) {
+            if (definition.pipeline_implementation) {
+                const auto child = definition.pipeline_implementation->prepare().execute(node_inputs, runtime_registry, collect_trace);
+                if (!child.succeeded()) node_result = *child.error;
+                else node_result = child.outputs;
+            } else if (definition.runtime_implementation) {
                 if (!runtime_registry) throw GraphError("node '" + node_id + "' requires a runtime registry");
                 runtime::ExecutionContext context{event.invocation_id, run_id, node_id, definition.id, {}, {}};
                 for (const auto& port : definition.ports) {

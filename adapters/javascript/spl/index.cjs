@@ -41,4 +41,48 @@ class Outputs {
   }
 }
 
-module.exports = { SPLValue, Int64, Float64, Bool, String: StringValue, Outputs };
+const childProcess = require("child_process");
+
+function rawInput(value) {
+  if (!(value instanceof SPLValue)) throw new TypeError("pipeline inputs must be SPL values");
+  return `${value.splType}:${value.value}`;
+}
+
+function runPipeline(artifact, inputs, engine = "build/spl") {
+  const args = ["run", artifact];
+  for (const [name, value] of Object.entries(inputs)) args.push("--input", `${name}=${rawInput(value)}`);
+  let output;
+  try {
+    output = childProcess.execFileSync(engine, args, { encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] });
+  } catch (error) {
+    throw new Error(String(error.stderr || error.stdout || error.message || "SPL pipeline failed").trim());
+  }
+  const outputs = {};
+  for (const line of output.trim().split(/\r?\n/)) {
+    if (!line) continue;
+    const [name, type, raw] = line.split("\t");
+    if (type === "Int64") outputs[name] = new Int64(BigInt(raw));
+    else if (type === "Float64") outputs[name] = new Float64(Number(raw));
+    else if (type === "Bool") outputs[name] = new Bool(raw === "true");
+    else outputs[name] = new StringValue(raw);
+  }
+  return outputs;
+}
+
+function loadPipeline(artifact, engine = "build/spl") {
+  return { artifact, run: inputs => runPipeline(artifact, inputs, engine) };
+}
+
+function buildPipeline(source, output, engine = "build/spl") {
+  const args = ["build", source];
+  if (output) args.push("--output", output);
+  try {
+    childProcess.execFileSync(engine, args, { encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] });
+  } catch (error) {
+    throw new Error(String(error.stderr || error.stdout || error.message || "SPL build failed").trim());
+  }
+  const artifact = output || source.replace(/\.spl(?::[^/]*)?$/, ".splb");
+  return loadPipeline(artifact, engine);
+}
+
+module.exports = { SPLValue, Int64, Float64, Bool, String: StringValue, Outputs, buildPipeline, loadPipeline, runPipeline };

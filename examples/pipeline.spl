@@ -29,8 +29,8 @@ pipeline Calculation {
     output result: Int64
 
     use sum: Add(a = x, b = y)
-    use product: Multiply(a = sum.sum, b = 2)
     use increment: Increment(value = product.product)
+    use product: Multiply(a = sum.sum, b = 2)
 
     result = increment.result
 }

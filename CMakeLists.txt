@@ -42,6 +42,7 @@ set(SPL_TEST_TARGETS
     spl_artifact_test
     spl_python_runtime_test
     spl_javascript_runtime_test
+    spl_nested_runtime_test
     spl_observability_test
 )
 
@@ -52,6 +53,7 @@ add_executable(spl_parser_test tests/parser_test.cpp)
 add_executable(spl_artifact_test tests/artifact_test.cpp)
 add_executable(spl_python_runtime_test tests/python_runtime_test.cpp)
 add_executable(spl_javascript_runtime_test tests/javascript_runtime_test.cpp)
+add_executable(spl_nested_runtime_test tests/nested_runtime_test.cpp)
 add_executable(spl_observability_test tests/observability_test.cpp)
 
 foreach(test_target IN LISTS SPL_TEST_TARGETS)
@@ -78,6 +80,8 @@ find_program(SPL_TSC_EXECUTABLE tsc)
 if (SPL_NODE_EXECUTABLE)
     add_test(NAME spl_javascript_runtime COMMAND spl_javascript_runtime_test)
     if (SPL_TSC_EXECUTABLE)
+        add_test(NAME spl_nested_runtime COMMAND spl_nested_runtime_test)
+        add_test(NAME spl_javascript_host COMMAND ${SPL_NODE_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/javascript_host_test.cjs)
         add_test(NAME spl_typescript_runtime COMMAND spl_javascript_runtime_test typescript)
     endif()
 endif()
@@ -90,6 +94,7 @@ set_tests_properties(
 if (SPL_NODE_EXECUTABLE)
     set_tests_properties(spl_javascript_runtime PROPERTIES WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR})
     if (SPL_TSC_EXECUTABLE)
+        set_tests_properties(spl_nested_runtime spl_javascript_host PROPERTIES WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR})
         set_tests_properties(spl_typescript_runtime PROPERTIES WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR})
     endif()
 endif()

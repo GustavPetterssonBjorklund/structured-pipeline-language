@@ -27,3 +27,8 @@ export class Outputs {
   constructor(values: Record<string, SPLValue>);
   readonly values: Record<string, SPLValue>;
 }
+
+export type Pipeline = { run(inputs: Record<string, SPLValue>): Record<string, SPLValue> };
+export function buildPipeline(source: string, output?: string, engine?: string): Pipeline;
+export function loadPipeline(artifact: string, engine?: string): Pipeline;
+export function runPipeline(artifact: string, inputs: Record<string, SPLValue>, engine?: string): Record<string, SPLValue>;

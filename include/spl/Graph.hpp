@@ -16,6 +16,7 @@
 #include <chrono>
 #include <filesystem>
 #include <map>
+#include <memory>
 #include <optional>
 #include <set>
 #include <stdexcept>
@@ -26,6 +27,7 @@
 namespace spl {
 
 class PreparedGraph;
+class Graph;
 
 enum class PortDirection { Input, Output };
 
@@ -44,6 +46,7 @@ struct NodeDefinition {
     NodeFunction implementation;
     std::vector<std::string> error_types;
     std::optional<runtime::Implementation> runtime_implementation;
+    std::shared_ptr<Graph> pipeline_implementation;
 
     const Port* port(const std::string& name, PortDirection direction) const {
         for (const auto& candidate : ports) {
@@ -137,7 +140,6 @@ public:
     using std::runtime_error::runtime_error;
 };
 
-class Graph;
 void write_pipeline_artifact(const Graph& graph, const std::filesystem::path& path);
 Graph read_pipeline_artifact(const std::filesystem::path& path);
 
@@ -147,6 +149,7 @@ public:
     const std::string& pipeline_name() const noexcept { return pipeline_name_; }
     void set_pipeline_name(std::string name) { pipeline_name_ = std::move(name); }
     const std::map<std::string, Type>& input_types() const noexcept { return inputs_; }
+    bool has_definition(const std::string& id) const noexcept { return definitions_.contains(id); }
 
     std::map<std::string, Type> output_types() const {
         std::map<std::string, Type> result;
@@ -158,7 +161,7 @@ public:
     }
 
     void add_definition(NodeDefinition definition) {
-        if (definition.id.empty() || (!definition.implementation && !definition.runtime_implementation)) {
+        if (definition.id.empty() || (!definition.implementation && !definition.runtime_implementation && !definition.pipeline_implementation)) {
             throw GraphError("node definition must have an id and implementation");
         }
         if (definitions_.contains(definition.id)) {
@@ -309,12 +312,18 @@ public:
             logger.debug("node started: {}", node_id);
             NodeStatistics node_statistics;
             node_statistics.node_id = node_id;
-            node_statistics.runtime = definition.runtime_implementation ? definition.runtime_implementation->runtime : "native";
+            node_statistics.runtime = definition.runtime_implementation ? definition.runtime_implementation->runtime : (definition.pipeline_implementation ? "pipeline" : "native");
             node_statistics.input_count = node_inputs.size();
             if (options.observability.mode != trace::ObservabilityMode::Off) emit(trace::TraceEventKind::NodeStarted, event);
             try {
                 NodeResult node_result;
-                if (definition.runtime_implementation) {
+                if (definition.pipeline_implementation) {
+                    node_result = [&]() -> NodeResult {
+                        const auto child = definition.pipeline_implementation->execute(node_inputs, runtime_registry, options);
+                        if (!child.succeeded()) return *child.error;
+                        return child.outputs;
+                    }();
+                } else if (definition.runtime_implementation) {
                     if (!runtime_registry) {
                         throw GraphError("node '" + node_id + "' requires a runtime registry");
                     }

@@ -1,0 +1,50 @@
+// Nested integration fixture: every leaf runtime participates in one graph.
+
+node Add {
+    input a: Int64
+    input b: Int64
+    output sum: Int64
+    impl python "../../examples/python_nodes/math_nodes.py::add"
+}
+
+node Multiply {
+    input a: Int64
+    input b: Int64
+    output product: Int64
+    impl javascript "../../examples/javascript_nodes/math_nodes.js::multiply"
+}
+
+node Increment {
+    input value: Int64
+    output result: Int64
+    impl javascript "../../examples/typescript_nodes/math_nodes.ts::increment"
+}
+
+pipeline Leaf {
+    input x: Int64
+    input y: Int64
+    output result: Int64
+
+    use add: Add(a = x, b = y)
+    result = add.sum
+}
+
+pipeline Middle {
+    input x: Int64
+    input y: Int64
+    output result: Int64
+
+    use leaf: Leaf(x = x, y = y)
+    use multiply: Multiply(a = leaf.result, b = 2)
+    result = multiply.product
+}
+
+pipeline Main {
+    input x: Int64
+    input y: Int64
+    output result: Int64
+
+    use middle: Middle(x = x, y = y)
+    use increment: Increment(value = middle.result)
+    result = increment.result
+}

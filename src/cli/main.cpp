@@ -9,6 +9,7 @@
 #include <spl/trace/JsonTraceSink.hpp>
 
 #include <iostream>
+#include <cstdint>
 #include <memory>
 #include <string>
 #include <utility>
@@ -60,11 +61,57 @@ int build_pipeline(int argc, char** argv) {
     std::cout << "Built " << output << '\n';
     return 0;
 }
+
+spl::Value parse_input_value(const std::string& specification, const std::string& expected_type) {
+    const auto separator = specification.find(':');
+    if (separator == std::string::npos) throw std::runtime_error("input must use name=Type:value syntax");
+    const auto value = specification.substr(separator + 1);
+    if (expected_type == "Int64") return spl::Value{static_cast<std::int64_t>(std::stoll(value))};
+    if (expected_type == "Float64") return spl::Value{std::stod(value)};
+    if (expected_type == "Bool") {
+        if (value == "true") return spl::Value{true};
+        if (value == "false") return spl::Value{false};
+        throw std::runtime_error("Bool input must be true or false");
+    }
+    if (expected_type == "String") return spl::Value{value};
+    throw std::runtime_error("unsupported input type: " + expected_type);
+}
+
+int run_pipeline(int argc, char** argv) {
+    if (argc < 3) throw std::runtime_error("usage: spl run <artifact> --input name=Type:value [...]");
+    const std::filesystem::path pipeline = argv[2];
+    spl::Graph graph = pipeline.extension() == ".splb"
+        ? spl::read_pipeline_artifact(pipeline)
+        : spl::parse_pipeline_file(pipeline);
+    spl::Values inputs;
+    for (int index = 3; index < argc; ++index) {
+        if (std::string(argv[index]) != "--input" || index + 1 >= argc) throw std::runtime_error("run expects --input name=Type:value");
+        const std::string specification = argv[++index];
+        const auto equals = specification.find('=');
+        const auto colon = specification.find(':', equals == std::string::npos ? 0 : equals + 1);
+        if (equals == std::string::npos || colon == std::string::npos) throw std::runtime_error("input must use name=Type:value syntax");
+        const auto name = specification.substr(0, equals);
+        const auto type = specification.substr(equals + 1, colon - equals - 1);
+        if (!graph.input_types().contains(name)) throw std::runtime_error("unknown pipeline input: " + name);
+        if (std::string(spl::type_name(graph.input_types().at(name))) != type) throw std::runtime_error("wrong type for pipeline input: " + name);
+        inputs.emplace(name, parse_input_value(specification.substr(equals + 1), type));
+    }
+    spl::runtime::RuntimeRegistry runtimes;
+    runtimes.register_adapter(std::make_unique<spl::runtime::PythonAdapter>());
+    runtimes.register_adapter(std::make_unique<spl::runtime::JavaScriptAdapter>());
+    const auto result = graph.prepare().execute(inputs, &runtimes);
+    if (!result.succeeded()) throw std::runtime_error(result.error->to_string());
+    for (const auto& [name, value] : result.outputs) {
+        std::cout << name << '\t' << spl::type_name(value.type()) << '\t' << value.to_string() << '\n';
+    }
+    return 0;
+}
 }
 
 int main(int argc, char** argv) {
     try {
         if (argc > 1 && std::string(argv[1]) == "build") return build_pipeline(argc, argv);
+        if (argc > 1 && std::string(argv[1]) == "run") return run_pipeline(argc, argv);
         if (argc > 1 && (std::string(argv[1]) == "--help" || std::string(argv[1]) == "-h")) {
             std::cout << "usage: spl build <source[:pipeline]> [-o <artifact>]\n";
             return 0;

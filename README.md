@@ -66,6 +66,18 @@ outputs = pipeline.run({"x": spl.Int64(3), "y": spl.Int64(4)})
 assert outputs["result"] == spl.Int64(15)
 ```
 
+Pipelines can also be composed: a `use` declaration may reference another
+pipeline declared in the same source file. Child pipelines are validated and
+executed by the same SPL engine and runtime registry as their parent.
+
+The JavaScript adapter exposes the equivalent engine-backed host operations:
+
+```javascript
+const spl = require("./adapters/javascript/spl");
+const pipeline = spl.buildPipeline("pipeline.spl:Main", "pipeline.Main.splb");
+const outputs = pipeline.run({x: new spl.Int64(3), y: new spl.Int64(4)});
+```
+
 For a reproducible environment, prefer `nix develop` with the included
 `flake.nix`; a regular system with CMake, a C++20 compiler, Python 3, and Just
 is also supported.

@@ -2,12 +2,13 @@
 
 #include <fstream>
 #include <cstring>
+#include <functional>
 #include <stdexcept>
 
 namespace spl {
 namespace {
 
-constexpr std::uint32_t artifact_version = 2;
+constexpr std::uint32_t artifact_version = 3;
 constexpr std::uint64_t max_count = 1'000'000;
 constexpr std::uint64_t max_string = 64 * 1024 * 1024;
 
@@ -155,46 +156,54 @@ std::vector<Port> read_ports(Reader& reader) {
 } // namespace
 
 void write_pipeline_artifact(const Graph& graph, const std::filesystem::path& path) {
-    graph.validate();
+    std::function<void(Writer&, const Graph&)> write_graph = [&](Writer& writer, const Graph& current) {
+        current.validate();
+        writer.string(current.pipeline_name_);
+
+        writer.u64(current.errors_.size());
+        for (const auto& [id, definition] : current.errors_) {
+            writer.string(id);
+            writer.u64(definition.fields.size());
+            for (const auto& field : definition.fields) { writer.string(field.name); write_type(writer, field.type); }
+        }
+        writer.u64(current.definitions_.size());
+        for (const auto& [id, definition] : current.definitions_) {
+            writer.string(id);
+            write_ports(writer, definition.ports);
+            writer.u64(definition.error_types.size());
+            for (const auto& error : definition.error_types) writer.string(error);
+            writer.u8(definition.pipeline_implementation ? 1 : 0);
+            if (definition.pipeline_implementation) write_graph(writer, *definition.pipeline_implementation);
+            else {
+                if (!definition.runtime_implementation) throw GraphError("cannot serialize a native in-memory node definition");
+                writer.string(definition.runtime_implementation->runtime);
+                writer.string(std::filesystem::absolute(definition.runtime_implementation->target).lexically_normal().string());
+            }
+        }
+        writer.u64(current.inputs_.size());
+        for (const auto& [name, type] : current.inputs_) { writer.string(name); write_type(writer, type); }
+        writer.u64(current.instances_.size());
+        for (const auto& [id, instance] : current.instances_) {
+            writer.string(id);
+            writer.string(instance.definition_id);
+            writer.u64(instance.inputs.size());
+            for (const auto& [name, binding] : instance.inputs) { writer.string(name); write_binding(writer, binding); }
+        }
+        writer.u64(current.outputs_.size());
+        for (const auto& [name, output] : current.outputs_) {
+            writer.string(name);
+            writer.u8(output.type.has_value() ? 1 : 0);
+            if (output.type) write_type(writer, *output.type);
+            write_binding(writer, output.binding);
+        }
+    };
+
     std::ofstream file(path, std::ios::binary);
     if (!file) throw GraphError("cannot create SPL pipeline artifact: " + path.string());
     Writer writer(file);
     file.write("SPLB", 4);
     writer.u32(artifact_version);
-    writer.string(graph.pipeline_name_);
-
-    writer.u64(graph.errors_.size());
-    for (const auto& [id, definition] : graph.errors_) {
-        writer.string(id);
-        writer.u64(definition.fields.size());
-        for (const auto& field : definition.fields) { writer.string(field.name); write_type(writer, field.type); }
-    }
-    writer.u64(graph.definitions_.size());
-    for (const auto& [id, definition] : graph.definitions_) {
-        writer.string(id);
-        write_ports(writer, definition.ports);
-        writer.u64(definition.error_types.size());
-        for (const auto& error : definition.error_types) writer.string(error);
-        if (!definition.runtime_implementation) throw GraphError("cannot serialize a native in-memory node definition");
-        writer.string(definition.runtime_implementation->runtime);
-        writer.string(std::filesystem::absolute(definition.runtime_implementation->target).lexically_normal().string());
-    }
-    writer.u64(graph.inputs_.size());
-    for (const auto& [name, type] : graph.inputs_) { writer.string(name); write_type(writer, type); }
-    writer.u64(graph.instances_.size());
-    for (const auto& [id, instance] : graph.instances_) {
-        writer.string(id);
-        writer.string(instance.definition_id);
-        writer.u64(instance.inputs.size());
-        for (const auto& [name, binding] : instance.inputs) { writer.string(name); write_binding(writer, binding); }
-    }
-    writer.u64(graph.outputs_.size());
-    for (const auto& [name, output] : graph.outputs_) {
-        writer.string(name);
-        writer.u8(output.type.has_value() ? 1 : 0);
-        if (output.type) write_type(writer, *output.type);
-        write_binding(writer, output.binding);
-    }
+    write_graph(writer, graph);
 }
 
 Graph read_pipeline_artifact(const std::filesystem::path& path) {
@@ -206,52 +215,55 @@ Graph read_pipeline_artifact(const std::filesystem::path& path) {
     if (!file || std::string(magic, 4) != "SPLB") throw GraphError("invalid SPL pipeline artifact header");
     if (reader.u32() != artifact_version) throw GraphError("unsupported SPL pipeline artifact version");
 
-    Graph graph;
-    graph.pipeline_name_ = reader.string();
-    for (std::uint64_t i = 0, size = reader.count(); i < size; ++i) {
-        ErrorDefinition definition{reader.string(), {}};
-        for (std::uint64_t j = 0, fields = reader.count(); j < fields; ++j) {
+    std::function<Graph()> read_graph = [&]() {
+        Graph graph;
+        graph.pipeline_name_ = reader.string();
+        for (std::uint64_t i = 0, size = reader.count(); i < size; ++i) {
+            ErrorDefinition definition{reader.string(), {}};
+            for (std::uint64_t j = 0, fields = reader.count(); j < fields; ++j) {
+                const auto name = reader.string();
+                definition.fields.push_back(ErrorField{name, read_type(reader)});
+            }
+            graph.add_error_definition(std::move(definition));
+        }
+        for (std::uint64_t i = 0, size = reader.count(); i < size; ++i) {
+            NodeDefinition definition;
+            definition.id = reader.string();
+            definition.ports = read_ports(reader);
+            for (std::uint64_t j = 0, errors = reader.count(); j < errors; ++j) definition.error_types.push_back(reader.string());
+            const auto kind = reader.u8();
+            if (kind > 1) throw GraphError("unknown node implementation in artifact");
+            if (kind == 1) definition.pipeline_implementation = std::make_shared<Graph>(read_graph());
+            else definition.runtime_implementation = runtime::Implementation{reader.string(), reader.string()};
+            graph.add_definition(std::move(definition));
+        }
+        for (std::uint64_t i = 0, size = reader.count(); i < size; ++i) {
             const auto name = reader.string();
             const auto type = read_type(reader);
-            definition.fields.push_back(ErrorField{name, type});
+            graph.add_input(name, type);
         }
-        graph.add_error_definition(std::move(definition));
-    }
-    for (std::uint64_t i = 0, size = reader.count(); i < size; ++i) {
-        NodeDefinition definition;
-        definition.id = reader.string();
-        definition.ports = read_ports(reader);
-        for (std::uint64_t j = 0, errors = reader.count(); j < errors; ++j) definition.error_types.push_back(reader.string());
-        definition.runtime_implementation = runtime::Implementation{reader.string(), reader.string()};
-        graph.add_definition(std::move(definition));
-    }
-    for (std::uint64_t i = 0, size = reader.count(); i < size; ++i) {
-        const auto name = reader.string();
-        const auto type = read_type(reader);
-        graph.add_input(name, type);
-    }
-    for (std::uint64_t i = 0, size = reader.count(); i < size; ++i) {
-        const auto id = reader.string();
-        const auto definition_id = reader.string();
-        NodeInstance instance{id, definition_id, {}};
-        for (std::uint64_t j = 0, inputs = reader.count(); j < inputs; ++j) {
+        for (std::uint64_t i = 0, size = reader.count(); i < size; ++i) {
+            const auto id = reader.string();
+            const auto definition_id = reader.string();
+            NodeInstance instance{id, definition_id, {}};
+            for (std::uint64_t j = 0, inputs = reader.count(); j < inputs; ++j) {
+                const auto name = reader.string();
+                instance.inputs.emplace(name, read_binding(reader));
+            }
+            graph.add_instance(std::move(instance));
+        }
+        for (std::uint64_t i = 0, size = reader.count(); i < size; ++i) {
             const auto name = reader.string();
-            auto binding = read_binding(reader);
-            instance.inputs.emplace(name, std::move(binding));
+            const auto has_type = reader.u8();
+            if (has_type > 1) throw GraphError("invalid output type flag in artifact");
+            const auto type = has_type ? std::optional<Type>{read_type(reader)} : std::nullopt;
+            const auto binding = read_binding(reader);
+            if (type) graph.add_output(name, *type, binding); else graph.add_output(name, binding);
         }
-        graph.add_instance(std::move(instance));
-    }
-    for (std::uint64_t i = 0, size = reader.count(); i < size; ++i) {
-        const auto name = reader.string();
-        const auto has_type = reader.u8();
-        if (has_type > 1) throw GraphError("invalid output type flag in artifact");
-        const auto type = has_type ? std::optional<Type>{read_type(reader)} : std::nullopt;
-        const auto binding = read_binding(reader);
-        if (type) graph.add_output(name, *type, binding);
-        else graph.add_output(name, binding);
-    }
-    graph.validate();
-    return graph;
+        graph.validate();
+        return graph;
+    };
+    return read_graph();
 }
 
 } // namespace spl
