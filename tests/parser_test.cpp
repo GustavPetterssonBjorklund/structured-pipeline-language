@@ -8,7 +8,7 @@ int main() {
     using namespace spl;
     using namespace spl::test;
 
-    const auto graph = parse_pipeline_file(std::filesystem::path{"examples/pipeline.spl"});
+    const auto graph = parse_pipeline_file(std::filesystem::path{"tests/fixtures/mixed_runtime.spl"});
     graph.validate();
 
     const auto literals = parse_pipeline_file(std::filesystem::path{"tests/fixtures/literals.spl"});

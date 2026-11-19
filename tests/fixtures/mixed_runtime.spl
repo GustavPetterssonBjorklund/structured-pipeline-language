@@ -1,0 +1,36 @@
+// Test fixture covering Python, JavaScript, and TypeScript node runtimes.
+
+node Add {
+    input a: Int64
+    input b: Int64
+    output sum: Int64
+
+    impl python "python_nodes/math_nodes.py::add"
+}
+
+node Multiply {
+    input a: Int64
+    input b: Int64
+    output product: Int64
+
+    impl javascript "javascript_nodes.js::multiply"
+}
+
+node Increment {
+    input value: Int64
+    output result: Int64
+
+    impl javascript "typescript_nodes.ts::increment"
+}
+
+pipeline Calculation {
+    input x: Int64
+    input y: Int64
+    output result: Int64
+
+    use sum: Add(a = x, b = y)
+    use increment: Increment(value = product.product)
+    use product: Multiply(a = sum.sum, b = 2)
+
+    result = increment.result
+}

@@ -1,7 +1,9 @@
-interface Int64Value {
-  add(other: Int64Value): Int64Value;
+import type { Int64 } from "../../adapters/javascript/spl/index";
+
+export function add({ a, b }: { a: Int64; b: Int64 }): Int64 {
+  return a.add(b);
 }
 
-export function add({ a, b }: { a: Int64Value; b: Int64Value }): Int64Value {
-  return a.add(b);
+export function increment({ value }: { value: Int64 }): Int64 {
+  return value.add(1n);
 }

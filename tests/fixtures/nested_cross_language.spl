@@ -4,20 +4,20 @@ node Add {
     input a: Int64
     input b: Int64
     output sum: Int64
-    impl python "../../examples/python_nodes/math_nodes.py::add"
+    impl python "python_nodes/math_nodes.py::add"
 }
 
 node Multiply {
     input a: Int64
     input b: Int64
     output product: Int64
-    impl javascript "../../examples/javascript_nodes/math_nodes.js::multiply"
+    impl javascript "javascript_nodes.js::multiply"
 }
 
 node Increment {
     input value: Int64
     output result: Int64
-    impl javascript "../../examples/typescript_nodes/math_nodes.ts::increment"
+    impl javascript "typescript_nodes.ts::increment"
 }
 
 pipeline Leaf {

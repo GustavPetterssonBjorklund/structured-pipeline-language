@@ -25,7 +25,7 @@ int main() {
     std::filesystem::remove(artifact);
 
     const auto runtime_artifact = std::filesystem::temp_directory_path() / "spl-runtime-artifact-test.splb";
-    write_pipeline_artifact(parse_pipeline_file(std::filesystem::path{"examples/pipeline.spl"}), runtime_artifact);
+    write_pipeline_artifact(parse_pipeline_file(std::filesystem::path{"tests/fixtures/mixed_runtime.spl"}), runtime_artifact);
     read_pipeline_artifact(runtime_artifact).prepare();
     std::filesystem::remove(runtime_artifact);
 }
